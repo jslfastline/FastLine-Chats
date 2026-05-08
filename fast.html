@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#00BFFF" />
+    <meta
+      name="description"
+      content="FastLine Chats – Modern Secure Messaging"
+    />
+    <link rel="manifest" href="manifest.json" />
+    <title>FastLine Chats</title>
+    <link rel="shortcut icon" href="icon-192.png" type="image/png" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      .pwa-install-bar {
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
+        background: linear-gradient(135deg, rgba(14,14,16,0.98), rgba(20,20,28,0.98));
+        border-top: 1px solid rgba(0,191,255,0.3);
+        padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+        backdrop-filter: blur(16px); font-family: 'DM Sans', sans-serif;
+        animation: slideUp 0.4s cubic-bezier(0.2,0.9,0.4,1);
+      }
+      @keyframes slideUp { from { transform: translateY(100%); } to { transform: none; } }
+      .pwa-install-bar .pwa-icon {
+        width: 40px; height: 40px; border-radius: 10px;
+        background: rgba(0,191,255,0.12); border: 1.5px solid rgba(0,191,255,0.3);
+        display: flex; align-items: center; justify-content: center;
+        color: #00BFFF; font-size: 1.2rem; flex-shrink: 0;
+      }
+      .pwa-install-bar .pwa-text { flex: 1; min-width: 0; }
+      .pwa-install-bar .pwa-text strong { color: #fff; font-size: 0.9rem; font-family: 'Syne', sans-serif; display: block; }
+      .pwa-install-bar .pwa-text small { color: rgba(255,255,255,0.5); font-size: 0.75rem; }
+      .pwa-install-bar .pwa-install-btn {
+        background: linear-gradient(135deg, #00BFFF, #1E90FF); border: none;
+        border-radius: 10px; padding: 9px 18px; color: #000; font-weight: 700;
+        font-size: 0.82rem; cursor: pointer; font-family: 'Syne', sans-serif; white-space: nowrap;
+      }
+      .pwa-install-bar .pwa-close-btn {
+        background: transparent; border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 10px; padding: 9px 12px; color: rgba(255,255,255,0.5);
+        font-size: 0.82rem; cursor: pointer;
+      }
+      .pwa-install-bar.hidden { display: none !important; }
+      #installPwaBtnFixed {
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
+        background: linear-gradient(135deg,#00BFFF,#1E90FF); border: none;
+        padding: 14px; color: #000; font-weight: 700; font-size: 0.95rem;
+        font-family: 'Syne', sans-serif; cursor: pointer; letter-spacing: 1px;
+        display: none; align-items: center; justify-content: center; gap: 10px;
+      }
+    </style>
+  </head>
+  <body class="dark-mode">
+    <div id="app">
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <div class="logo-icon"><i class="fas fa-bolt"></i></div>
+            <span class="logo-text">FastLine</span>
+          </div>
+          <div class="sidebar-actions">
+            <button class="icon-btn" id="themeToggleBtn" title="Toggle Theme">
+              <i class="fas fa-moon" id="themeIcon"></i>
+            </button>
+            <button class="icon-btn" id="newChatBtn" title="New Chat">
+              <i class="fas fa-edit"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="search-bar">
+          <i class="fas fa-search search-icon"></i>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="Search conversations…"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="nav-tabs">
+          <button class="nav-tab active" data-tab="chats">
+            <i class="fas fa-comment-dots"></i> Chats
+          </button>
+          <button class="nav-tab" data-tab="groups">
+            <i class="fas fa-users"></i> Groups
+          </button>
+          <button class="nav-tab" data-tab="status">
+            <i class="fas fa-circle-notch"></i> Status
+          </button>
+        </div>
+
+        <div class="conversation-list" id="conversationList">
+          <div class="empty-state" id="emptyChats">
+            <div class="empty-icon"><i class="fas fa-comment-slash"></i></div>
+            <p>No conversations yet</p>
+            <span>Start a new chat to begin</span>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="user-avatar-wrap" id="profileThumb">
+            <img
+              src="default-profile.png"
+              alt="You"
+              id="sidebarAvatar"
+              onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'"
+            />
+            <span class="online-dot"></span>
+          </div>
+          <div class="user-info-mini">
+            <span class="user-name-mini" id="sidebarName">Loading…</span>
+            <span class="user-status-mini" id="sidebarStatus">Online</span>
+          </div>
+          <div class="sidebar-footer-actions">
+            <button class="icon-btn" id="settingsBtn" title="Settings">
+              <i class="fas fa-cog"></i>
+            </button>
+            <button class="icon-btn" id="profileBtn" title="Profile">
+              <i class="fas fa-user-circle"></i>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <main id="mainPanel" class="main-panel">
+        <div id="welcomeScreen" class="welcome-screen">
+          <div class="welcome-glow"></div>
+          <div class="welcome-content">
+            <div class="welcome-logo"><i class="fas fa-bolt"></i></div>
+            <h1>FastLine Chats</h1>
+            <p>Select a conversation or start a new one</p>
+            <button class="btn-primary" id="welcomeNewChat">
+              <i class="fas fa-plus"></i> Start Chatting
+            </button>
+          </div>
+        </div>
+
+        <div id="chatWindow" class="chat-window hidden">
+          <div class="chat-header">
+            <button class="icon-btn back-btn" id="backBtn">
+              <i class="fas fa-arrow-left"></i>
+            </button>
+            <div class="chat-peer-info">
+              <div class="peer-avatar-wrap">
+                <img
+                  src="default-profile.png"
+                  alt=""
+                  id="chatPeerAvatar"
+                  onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'"
+                />
+                <span class="online-dot" id="peerOnlineDot"></span>
+              </div>
+              <div class="peer-details">
+                <span class="peer-name" id="chatPeerName">—</span>
+                <span class="peer-status" id="chatPeerStatus">Offline</span>
+              </div>
+            </div>
+            <div class="chat-header-actions">
+              <button class="icon-btn" id="voiceCallBtn" title="Voice Call">
+                <i class="fas fa-phone"></i>
+              </button>
+              <button class="icon-btn" id="videoCallBtn" title="Video Call">
+                <i class="fas fa-video"></i>
+              </button>
+              <button class="icon-btn" id="chatMenuBtn" title="More">
+                <i class="fas fa-ellipsis-v"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="messages-area" id="messagesArea">
+            <div class="date-separator"><span>Today</span></div>
+          </div>
+
+          <div class="typing-indicator hidden" id="typingIndicator">
+            <span id="typingName">User</span> is typing<span class="typing-dots"
+              ><span></span><span></span><span></span
+            ></span>
+          </div>
+
+          <div class="reply-preview hidden" id="replyPreview">
+            <div class="reply-bar"></div>
+            <div class="reply-content">
+              <span class="reply-author" id="replyAuthor">You</span>
+              <span class="reply-text" id="replyText">Original message…</span>
+            </div>
+            <button class="icon-btn close-reply" id="closeReply">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div class="smart-replies-bar hidden" id="smartRepliesBar"></div>
+
+          <div class="input-area" id="inputArea">
+            <button class="icon-btn emoji-btn" id="emojiBtn" title="Emoji">
+              <i class="fas fa-smile"></i>
+            </button>
+            <div class="input-wrap">
+              <div
+                class="msg-input"
+                id="msgInput"
+                contenteditable="true"
+                data-placeholder="Type a message…"
+                spellcheck="true"
+              ></div>
+            </div>
+            <button
+              class="icon-btn attach-btn"
+              id="attachBtn"
+              title="Attach File"
+            >
+              <i class="fas fa-paperclip"></i>
+            </button>
+            <button
+              class="icon-btn voice-btn"
+              id="voiceRecordBtn"
+              title="Voice Note"
+            >
+              <i class="fas fa-microphone"></i>
+            </button>
+            <button class="send-btn" id="sendBtn" title="Send">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+            <input
+              type="file"
+              id="fileInput"
+              accept="image/*,.pdf,.doc,.docx,.txt"
+              hidden
+            />
+          </div>
+
+          <div class="emoji-picker hidden" id="emojiPicker">
+            <div class="emoji-search-wrap">
+              <input type="text" id="emojiSearch" placeholder="Search emoji…" />
+            </div>
+            <div class="emoji-grid" id="emojiGrid"></div>
+          </div>
+        </div>
+
+        <div id="groupsView" class="groups-view hidden">
+          <div class="view-header">
+            <h2><i class="fas fa-users"></i> Groups</h2>
+            <button class="btn-primary" id="createGroupBtn">
+              <i class="fas fa-plus"></i> Create Group
+            </button>
+          </div>
+          <div class="groups-list" id="groupsList">
+            <div class="empty-state">
+              <div class="empty-icon"><i class="fas fa-users"></i></div>
+              <p>No groups yet</p>
+              <span>Create your first group to get started</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="statusView" class="status-view hidden">
+          <div class="view-header">
+            <h2><i class="fas fa-circle-notch"></i> Status</h2>
+            <button class="btn-primary" id="addStatusBtn">
+              <i class="fas fa-plus"></i> Add Status
+            </button>
+          </div>
+          <div class="status-list" id="statusList">
+            <div class="empty-state">
+              <div class="empty-icon"><i class="fas fa-circle-notch"></i></div>
+              <p>No statuses yet</p>
+              <span>Share your status with friends</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- New Chat Modal -->
+    <div class="modal-overlay hidden" id="newChatModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2><i class="fas fa-user-plus"></i> New Chat</h2>
+          <button class="icon-btn modal-close" data-modal="newChatModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="search-bar" style="margin-bottom: 1rem">
+            <i class="fas fa-search search-icon"></i>
+            <input
+              type="text"
+              id="userSearchInput"
+              placeholder="Search users by email or name…"
+              autocomplete="off"
+            />
+          </div>
+          <div class="user-list-scroll" style="max-height: 50vh; overflow-y: auto;" id="userSearchResults">
+            <div class="search-hint">
+              <i class="fas fa-info-circle"></i> Type to find users, or scroll to see all
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div class="modal-overlay hidden" id="profileModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2><i class="fas fa-user-circle"></i> My Profile</h2>
+          <button class="icon-btn modal-close" data-modal="profileModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="profile-avatar-section">
+            <div class="profile-avatar-wrap">
+              <img
+                src="default-profile.png"
+                alt="Profile"
+                id="profileAvatarImg"
+                onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'"
+              />
+              <button class="avatar-upload-btn" id="avatarUploadBtn">
+                <i class="fas fa-camera"></i>
+              </button>
+              <input type="file" id="avatarInput" accept="image/*" hidden />
+            </div>
+            <div class="profile-email" id="profileEmail">—</div>
+          </div>
+          <div class="form-group">
+            <label>Display Name</label>
+            <input
+              type="text"
+              id="profileDisplayName"
+              class="input-field-modal"
+              placeholder="Your name"
+              maxlength="40"
+            />
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <input
+              type="text"
+              id="profileStatusMsg"
+              class="input-field-modal"
+              placeholder="Hey there! I'm using FastLine."
+              maxlength="80"
+            />
+          </div>
+          <button class="btn-primary full-width" id="saveProfileBtn">
+            <i class="fas fa-save"></i> Save Profile
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay hidden" id="settingsModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2><i class="fas fa-cog"></i> Settings</h2>
+          <button class="icon-btn modal-close" data-modal="settingsModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section">
+            <h3>Theme</h3>
+            <div class="theme-options">
+              <button class="theme-option" data-theme="cyberpunk">Cyberpunk</button>
+              <button class="theme-option" data-theme="minimal">Minimal</button>
+              <button class="theme-option" data-theme="nature">Nature</button>
+              <button class="theme-option" data-theme="light">Light</button>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Notifications</h3>
+            <label class="toggle-label">
+              <input type="checkbox" id="notifToggle" />
+              <span class="toggle-slider"></span>
+              Enable Notifications
+            </label>
+          </div>
+          <div class="settings-section">
+            <h3>Account</h3>
+            <button class="btn-secondary" id="logoutBtn" style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 18px;color:var(--error);cursor:pointer;display:flex;align-items:center;gap:8px;font-size:0.9rem;font-family:inherit;width:100%;justify-content:center;">
+              <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Video Call Modal -->
+    <div class="modal-overlay hidden" id="videoCallModal">
+      <div class="modal video-call-modal">
+        <div class="call-bg"></div>
+        <div class="call-ui">
+          <div class="call-peer-name" id="callPeerName">—</div>
+          <div class="call-status" id="callStatus">Calling…</div>
+          <div class="video-grid">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <video id="localVideo" autoplay playsinline muted class="local-video"></video>
+          </div>
+          <div class="call-controls">
+            <button class="call-btn mute-btn" id="muteBtn" title="Mute"><i class="fas fa-microphone"></i></button>
+            <button class="call-btn end-btn" id="endCallBtn" title="End Call"><i class="fas fa-phone-slash"></i></button>
+            <button class="call-btn cam-btn" id="camBtn" title="Camera"><i class="fas fa-video"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice Recording UI -->
+    <div class="voice-recording-bar hidden" id="voiceRecordingBar">
+      <div class="recording-pulse"></div>
+      <span class="rec-label"><i class="fas fa-circle"></i> Recording</span>
+      <span class="rec-timer" id="recTimer">0:00</span>
+      <button class="icon-btn cancel-rec" id="cancelRecBtn"><i class="fas fa-trash"></i></button>
+      <button class="btn-primary send-rec" id="sendRecBtn"><i class="fas fa-paper-plane"></i> Send</button>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu hidden" id="contextMenu">
+      <button class="ctx-item" data-action="reply"><i class="fas fa-reply"></i> Reply</button>
+      <button class="ctx-item" data-action="react"><i class="fas fa-smile"></i> React</button>
+      <button class="ctx-item" data-action="copy"><i class="fas fa-copy"></i> Copy</button>
+      <button class="ctx-item" data-action="edit"><i class="fas fa-edit"></i> Edit</button>
+      <button class="ctx-item danger" data-action="delete"><i class="fas fa-trash"></i> Delete</button>
+    </div>
+
+    <!-- Reaction Picker -->
+    <div class="reaction-picker hidden" id="reactionPicker">
+      <span class="reaction-opt" data-emoji="👍">👍</span>
+      <span class="reaction-opt" data-emoji="❤️">❤️</span>
+      <span class="reaction-opt" data-emoji="😂">😂</span>
+      <span class="reaction-opt" data-emoji="😮">😮</span>
+      <span class="reaction-opt" data-emoji="😢">😢</span>
+      <span class="reaction-opt" data-emoji="🔥">🔥</span>
+    </div>
+
+    <!-- PWA Install Bar (visible when not installed) -->
+    <div id="pwaInstallBar" class="pwa-install-bar hidden">
+      <div class="pwa-icon"><i class="fas fa-bolt"></i></div>
+      <div class="pwa-text">
+        <strong>Install FastLine Chats</strong>
+        <small>Add to home screen for best experience</small>
+      </div>
+      <button class="pwa-install-btn" id="pwaInstallBtn">Install</button>
+      <button class="pwa-close-btn" id="pwaDismissBtn">&times;</button>
+    </div>
+
+    <!-- Persistent big install button for bottom of app -->
+    <button id="installPwaBtnFixed">
+      <i class="fas fa-download"></i> Install FastLine Chats App
+    </button>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer"></div>
+
+    <!-- Import Map -->
+    <script type="importmap">
+      {
+        "imports": {
+          "firebase/app": "./scripts/mock-firebase-app.js",
+          "firebase/firestore": "./scripts/mock-firebase-firestore.js",
+          "firebase/storage": "./scripts/mock-firebase-storage.js"
+        }
+      }
+    </script>
+
+    <script src="scripts/firebase-config.js" type="module"></script>
+    <script src="app.js" type="module"></script>
+
+    <!-- PWA Install Logic -->
+    <script>
+      (function() {
+        let deferredPrompt = null;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferredPrompt = e;
+          showInstallUI();
+        });
+
+        window.addEventListener('appinstalled', () => {
+          deferredPrompt = null;
+          document.getElementById('pwaInstallBar').classList.add('hidden');
+          const btn = document.getElementById('installPwaBtnFixed');
+          btn.textContent = '✓ Installed';
+          btn.disabled = true;
+          btn.style.opacity = '0.5';
+        });
+
+        function showInstallUI() {
+          if (isStandalone()) return;
+          if (localStorage.getItem('fastline_pwa_dismissed')) return;
+          document.getElementById('pwaInstallBar').classList.remove('hidden');
+        }
+
+        function isStandalone() {
+          return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        }
+
+        document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
+          if (!deferredPrompt) { showFallback(); return; }
+          deferredPrompt.prompt();
+          const result = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          document.getElementById('pwaInstallBar').classList.add('hidden');
+          if (result.outcome === 'accepted') {
+            document.getElementById('installPwaBtnFixed').textContent = '✓ Installed';
+            document.getElementById('installPwaBtnFixed').disabled = true;
+          }
+        });
+
+        document.getElementById('pwaDismissBtn').addEventListener('click', () => {
+          localStorage.setItem('fastline_pwa_dismissed', '1');
+          document.getElementById('pwaInstallBar').classList.add('hidden');
+        });
+
+        document.getElementById('installPwaBtnFixed').addEventListener('click', async () => {
+          if (isStandalone()) { showToast('✓ Already installed!'); return; }
+          if (!deferredPrompt) { showFallback(); return; }
+          deferredPrompt.prompt();
+          const result = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          if (result.outcome === 'accepted') {
+            document.getElementById('installPwaBtnFixed').textContent = '✓ Installed';
+            document.getElementById('installPwaBtnFixed').disabled = true;
+            showToast('✅ FastLine Chats installed!');
+          } else {
+            showToast('❌ Installation cancelled');
+          }
+        });
+
+        function showFallback() {
+          showToast('⚙️ Open browser menu → "Add to Home Screen" to install');
+        }
+
+        function showToast(msg) {
+          const t = document.createElement('div');
+          t.className = 'toast-notif';
+          t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(14,14,16,.95);border:1px solid rgba(0,191,255,.3);border-radius:12px;padding:10px 20px;font-size:.85rem;color:#fff;font-family:"DM Sans",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5);backdrop-filter:blur(12px);animation:fadeIn .3s ease;white-space:nowrap;';
+          t.textContent = msg;
+          document.body.appendChild(t);
+          setTimeout(() => t.remove(), 4000);
+        }
+
+        if (isStandalone()) {
+          document.getElementById('installPwaBtnFixed').textContent = '✓ Installed';
+          document.getElementById('installPwaBtnFixed').disabled = true;
+          document.getElementById('installPwaBtnFixed').style.opacity = '0.5';
+        }
+
+        // Also show install button after a delay if not standalone
+        if (!isStandalone()) {
+          setTimeout(() => {
+            document.getElementById('installPwaBtnFixed').style.display = 'flex';
+          }, 2000);
+        }
+      })();
+    </script>
+
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("service-worker.js")
+            .then((reg) => console.log("[SW] Registered", reg.scope))
+            .catch((err) => console.warn("[SW] Failed", err));
+        });
+      }
+    </script>
+  </body>
+</html>

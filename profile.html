@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#00BFFF" />
+  <link rel="manifest" href="manifest.json" />
+  <title>FastLine | Setup Profile</title>
+  <link rel="shortcut icon" href="icon-192.png" type="image/png" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #0E0E10; --accent: #00BFFF; --accent2: #FF6B00; --surface: rgba(20,20,26,0.95); --text: #fff; --text-muted: rgba(255,255,255,0.5); --border: rgba(0,191,255,0.2); --error: #ff3366; --success: #00e676; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); min-height: 100vh; display: flex; align-items: center; justify-content: center; overflow-x: hidden; }
+    .bg-layer { position: fixed; inset: 0; z-index: 0; background: radial-gradient(ellipse 80% 60% at 20% 30%, rgba(0,191,255,0.12) 0%, transparent 70%), radial-gradient(ellipse 60% 50% at 80% 70%, rgba(255,107,0,0.08) 0%, transparent 70%), #0E0E10; }
+    .grid-lines { position: fixed; inset: 0; z-index: 0; background-image: linear-gradient(rgba(0,191,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,191,255,0.04) 1px, transparent 1px); background-size: 60px 60px; }
+    .card { position: relative; z-index: 10; width: 100%; max-width: 460px; margin: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 28px; box-shadow: 0 24px 64px rgba(0,0,0,.5); backdrop-filter: blur(20px); animation: slideUp .6s cubic-bezier(.2,.9,.4,1.1); }
+    @keyframes slideUp { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:none} }
+    .card-inner { padding: 2.4rem 2rem; }
+    .step-header { text-align: center; margin-bottom: 2rem; }
+    .step-icon { width: 64px; height: 64px; border-radius: 18px; background: rgba(0,191,255,.1); border: 2px solid rgba(0,191,255,.25); color: var(--accent); font-size: 1.6rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; box-shadow: 0 0 24px rgba(0,191,255,.15); }
+    h1 { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 800; background: linear-gradient(120deg, var(--accent), #7DF9FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .sub { font-size: .85rem; color: var(--text-muted); margin-top: .4rem; }
+    .avatar-section { text-align: center; margin-bottom: 1.6rem; }
+    .avatar-ring { width: 100px; height: 100px; border-radius: 50%; margin: 0 auto .8rem; position: relative; cursor: pointer; }
+    .avatar-ring img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent); }
+    .avatar-ring .cam-btn { position: absolute; bottom: 4px; right: 4px; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--bg); background: var(--accent); color: #000; font-size: .8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .avatar-hint { font-size: .75rem; color: var(--text-muted); }
+    .form-group { margin-bottom: 1.3rem; }
+    label { display: block; font-size: .75rem; font-weight: 600; color: var(--text-muted); margin-bottom: .45rem; letter-spacing: .5px; text-transform: uppercase; }
+    .input-field { width: 100%; background: rgba(0,191,255,.05); border: 1.5px solid var(--border); border-radius: 14px; padding: 12px 15px; font-size: .92rem; color: var(--text); font-family: inherit; outline: none; transition: all .2s; }
+    .input-field::placeholder { color: var(--text-muted); }
+    .input-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,191,255,.1); background: rgba(0,191,255,.08); }
+    .btn-primary { width: 100%; background: linear-gradient(135deg, #00BFFF, #1E90FF); border: none; border-radius: 14px; padding: 14px; font-family: 'Syne', sans-serif; font-size: .95rem; font-weight: 700; color: #000; letter-spacing: .5px; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-primary:hover { transform: scale(1.02); box-shadow: 0 0 24px rgba(0,191,255,.4); }
+    .btn-primary:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+    .msg { font-size: .8rem; min-height: 1.2em; margin-top: .5rem; }
+    .msg.error { color: var(--error); }
+    .msg.success { color: var(--success); }
+    .powered { text-align: center; font-size: .65rem; letter-spacing: 1.5px; color: var(--text-muted); margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,.06); }
+  </style>
+</head>
+<body>
+<div class="bg-layer"></div>
+<div class="grid-lines"></div>
+
+<div class="card">
+  <div class="card-inner">
+    <div class="step-header">
+      <div class="step-icon"><i class="fas fa-user-astronaut"></i></div>
+      <h1>Set Up Your Profile</h1>
+      <p class="sub">Choose a name and photo so others can find you</p>
+    </div>
+
+    <div class="avatar-section">
+      <div class="avatar-ring" id="avatarRing">
+        <img src="default-profile.png" alt="Avatar" id="avatarPreview" onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=000'" />
+        <button class="cam-btn" type="button"><i class="fas fa-camera"></i></button>
+      </div>
+      <div class="avatar-hint">Tap to upload a photo</div>
+      <input type="file" id="avatarFile" accept="image/*" hidden />
+    </div>
+
+    <div class="form-group">
+      <label>Display Name <span style="color:var(--accent)">*</span></label>
+      <input type="text" id="displayName" class="input-field" placeholder="Your full name" maxlength="40" />
+    </div>
+
+    <div class="form-group">
+      <label>Status Message</label>
+      <input type="text" id="statusMsg" class="input-field" placeholder="Hey there! I'm using FastLine." maxlength="80" />
+    </div>
+
+    <button class="btn-primary" id="saveBtn"><i class="fas fa-rocket"></i> Enter FastLine</button>
+    <div class="msg" id="formMsg"></div>
+    <div class="powered"><i class="fas fa-bolt"></i> FastLine Chats · Secure · Realtime</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "firebase/app":      "./scripts/mock-firebase-app.js",
+    "firebase/firestore":"./scripts/mock-firebase-firestore.js",
+    "firebase/storage":  "./scripts/mock-firebase-storage.js"
+  }
+}
+</script>
+<script type="module">
+  import { initializeApp } from 'firebase/app';
+  import { getFirestore, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+  import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
+  const firebaseConfig = { apiKey: "local", authDomain: "local", projectId: "fastline-local", storageBucket: "local", messagingSenderId: "0", appId: "0" };
+  const app     = initializeApp(firebaseConfig);
+  const db      = getFirestore(app);
+  const storage = getStorage(app);
+
+  const getSession = () => {
+    const e = localStorage.getItem('fastline_session_email');
+    const x = +localStorage.getItem('fastline_session_expiry');
+    return (e && Date.now() < x) ? e : null;
+  };
+
+  const emailToId = e => e.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+  const email = getSession();
+  if (!email) { window.location.href = 'login.html'; }
+
+  let avatarUrl = null;
+
+  const avatarRing = document.getElementById('avatarRing');
+  const avatarFile = document.getElementById('avatarFile');
+  const avatarPreview = document.getElementById('avatarPreview');
+  const saveBtn = document.getElementById('saveBtn');
+  const formMsg = document.getElementById('formMsg');
+
+  avatarRing.addEventListener('click', () => avatarFile.click());
+
+  avatarFile.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { avatarPreview.src = reader.result; };
+    reader.readAsDataURL(file);
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const name   = document.getElementById('displayName').value.trim();
+    const status = document.getElementById('statusMsg').value.trim() || "Hey there! I'm using FastLine.";
+    formMsg.textContent = '';
+
+    if (!name) { formMsg.textContent = '⚠️ Display name is required.'; formMsg.className = 'msg error'; return; }
+
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; saveBtn.disabled = true;
+
+    try {
+      const userId = emailToId(email);
+
+      if (avatarFile.files[0]) {
+        const sRef = ref(storage, `avatars/${userId}`);
+        await uploadBytes(sRef, avatarFile.files[0]);
+        avatarUrl = await getDownloadURL(sRef);
+      }
+
+      await setDoc(doc(db, 'users', userId), {
+        email, username: name, status,
+        avatar: avatarUrl || '',
+        online: true,
+        createdAt: serverTimestamp(),
+        lastSeen: serverTimestamp()
+      }, { merge: true });
+
+      localStorage.setItem('fastline_username', name);
+      formMsg.textContent = '✓ Profile saved! Entering FastLine…';
+      formMsg.className = 'msg success';
+      setTimeout(() => window.location.href = 'fast.html', 900);
+    } catch (err) {
+      formMsg.textContent = '❌ Error: ' + err.message;
+      formMsg.className = 'msg error';
+      saveBtn.innerHTML = '<i class="fas fa-rocket"></i> Enter FastLine'; saveBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
