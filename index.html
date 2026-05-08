@@ -46,6 +46,23 @@
         animation: slide 1s linear infinite;
       }
       .status { margin-top: 10px; font-size: 0.95rem; color: var(--muted); }
+      .install-btn {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 1000;
+        border: 1px solid rgba(0,191,255,0.5);
+        background: rgba(14,14,16,0.92);
+        color: #7df9ff;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 0.82rem;
+        font-family: "Times New Roman", Times, serif;
+        cursor: pointer;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+        display: none;
+      }
+      .install-btn.show { display: inline-flex; align-items: center; gap: 6px; }
       @keyframes pulse { from { transform: scale(0.98); } to { transform: scale(1.02); } }
       @keyframes slide { from { transform: translateX(-120%); } to { transform: translateX(320%); } }
     </style>
@@ -58,6 +75,7 @@
       <div class="loader"></div>
       <p class="status">Please wait 5 seconds...</p>
     </main>
+    <button id="installAppBtn" class="install-btn" type="button">Install App</button>
     <script type="importmap">
       {
         "imports": {
@@ -114,6 +132,50 @@
       setTimeout(() => {
         window.location.href = targetRoute;
       }, 5000);
+    </script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('service-worker.js').catch(() => {});
+        });
+      }
+
+      const installBtn = document.getElementById('installAppBtn');
+      let deferredPrompt = null;
+      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+      if (!isStandalone) {
+        if (isIos) installBtn.classList.add('show');
+      }
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (!isStandalone) installBtn.classList.add('show');
+      });
+
+      window.addEventListener('appinstalled', () => {
+        installBtn.classList.remove('show');
+        deferredPrompt = null;
+      });
+
+      installBtn.addEventListener('click', async () => {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          installBtn.classList.remove('show');
+          return;
+        }
+
+        if (isIos) {
+          alert('On iPhone/iPad: tap Share button then "Add to Home Screen".');
+          return;
+        }
+
+        alert('Install option is not ready yet. Use your browser menu and choose "Install App" or "Add to Home Screen".');
+      });
     </script>
   </body>
 </html>

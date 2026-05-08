@@ -2,7 +2,7 @@
   "name": "FastLine Chats",
   "short_name": "FastLine",
   "description": "Modern, secure and futuristic real-time messaging platform",
-  "start_url": "/splash.html",
+  "start_url": "/index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0E0E10",

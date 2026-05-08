@@ -1,7 +1,7 @@
-const CACHE_NAME = 'fastline-v3';
+const CACHE_NAME = 'fastline-v5';
 const STATIC_ASSETS = [
   '/',
-  '/splash.html',
+  '/index.html',
   '/fast.html',
   '/login.html',
   '/profile.html',
@@ -56,7 +56,7 @@ self.addEventListener('fetch', event => {
         }
         return response;
       })
-      .catch(() => caches.match(request).then(cached => cached || caches.match('/splash.html')))
+      .catch(() => caches.match(request).then(cached => cached || caches.match('/index.html')))
   );
 });
 
