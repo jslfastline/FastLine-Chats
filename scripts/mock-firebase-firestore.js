@@ -27,16 +27,6 @@ function _initDB() {
     _version: 0,
     _savedAt: Date.now()
   };
-  const demos = [
-    { id: 'amina_hassan', username: 'Amina Hassan', email: 'amina@fastline.app', status: 'Form 6 student | Science lover', avatar: '', online: true, phone: '+255700000001' },
-    { id: 'joseph_mwanga', username: 'Joseph Mwanga', email: 'joseph@fastline.app', status: 'Teacher | Math & Physics', avatar: '', online: false, phone: '+255700000002' },
-    { id: 'grace_mbwana', username: 'Grace Mbwana', email: 'grace@fastline.app', status: 'Biology & Chemistry | STEM', avatar: '', online: true, phone: '+255700000003' },
-    { id: 'david_kimaro', username: 'David Kimaro', email: 'david@fastline.app', status: 'CS student | Tech enthusiast', avatar: '', online: false, phone: '+255700000004' },
-    { id: 'sarah_john', username: 'Sarah John', email: 'sarah@fastline.app', status: 'Hey there! using FastLine.', avatar: '', online: true, phone: '+255700000005' }
-  ];
-  demos.forEach(u => {
-    data.users[u.id] = { ...u, lastSeen: Date.now() - Math.random() * 3600000, createdAt: Date.now() - 86400000 };
-  });
   localStorage.setItem(DB_KEY, JSON.stringify(data));
   return data;
 }

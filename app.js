@@ -21,6 +21,7 @@ import {
 
 const $ = id => document.getElementById(id);
 const emailToId = e => e.toLowerCase().replace(/[^a-z0-9]/g, '_');
+const normalizeUsername = (value) => value.trim().toLowerCase();
 const getSession = () => {
   const e = localStorage.getItem('fastline_session_email');
   const x = +localStorage.getItem('fastline_session_expiry');
@@ -51,6 +52,13 @@ function formatChatTime(ts) {
   if (!ts) return '';
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+async function isUsernameTaken(name, currentUserId) {
+  const usernameLower = normalizeUsername(name);
+  if (!usernameLower) return false;
+  const snap = await getDocs(query(collection(db, 'users'), where('usernameLower', '==', usernameLower)));
+  return snap.docs.some(d => d.id !== currentUserId);
 }
 
 // ════════════════════════════════════════════════════
@@ -849,7 +857,11 @@ $('saveProfileBtn').addEventListener('click', async () => {
   const status = $('profileStatusMsg').value.trim();
   if (!name) { toast('Display name required', 'var(--error)'); return; }
   try {
-    await updateDoc(doc(db, 'users', currentUser.id), { username: name, status });
+    if (await isUsernameTaken(name, currentUser.id)) {
+      toast('Username already taken. Choose another.', 'var(--error)');
+      return;
+    }
+    await updateDoc(doc(db, 'users', currentUser.id), { username: name, usernameLower: normalizeUsername(name), status });
     currentUser.displayName = name; currentUser.status = status;
     $('sidebarName').textContent = name;
     toast('Profile saved!');

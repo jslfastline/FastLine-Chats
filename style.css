@@ -1,3 +1,10 @@
+:root {
+  --font-main: "Times New Roman", Times, serif;
+}
+
+body, button, input, textarea, select {
+  font-family: var(--font-main) !important;
+}
 /* ══════════════════════════════════════════════════════
    FastLine Chats — style.css
    Futuristic Cyberpunk Messenger UI
