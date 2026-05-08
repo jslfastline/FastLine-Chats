@@ -165,6 +165,11 @@
         [SESSION_EMAIL_KEY, SESSION_EXPIRY_KEY, "fastline_username", "fastline_avatar"].forEach(k => localStorage.removeItem(k));
       };
       const emailToId = (e) => e.toLowerCase().replace(/[^a-z0-9]/g, "_");
+      const isProfileComplete = (user) => {
+        const hasUsername = !!(user?.username || "").trim();
+        const hasAvatar = !!(user?.avatar || "").trim();
+        return hasUsername && hasAvatar;
+      };
 
       function toast(msg, color = "var(--accent)") {
         const t = document.createElement("div");
@@ -279,7 +284,12 @@
         try {
           const snap = await getDoc(doc(db, "users", userId));
           setTimeout(() => {
-            window.location.href = snap.exists() ? "fast.html" : "login.html";
+            if (!snap.exists()) {
+              clearSession();
+              window.location.href = "login.html";
+              return;
+            }
+            window.location.href = isProfileComplete(snap.data()) ? "fast.html" : "profile.html";
           }, 500);
         } catch {
           setTimeout(() => { window.location.href = "login.html"; }, 500);

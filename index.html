@@ -84,12 +84,27 @@
         return email && Date.now() < expires ? email : null;
       };
 
+      const clearSession = () => {
+        localStorage.removeItem(SESSION_EMAIL_KEY);
+        localStorage.removeItem(SESSION_EXPIRY_KEY);
+      };
+
+      const isProfileComplete = (user) => {
+        const hasUsername = !!(user?.username || "").trim();
+        const hasAvatar = !!(user?.avatar || "").trim();
+        return hasUsername && hasAvatar;
+      };
+
       async function getTargetRoute() {
         const email = getSession();
         if (!email) return "login.html";
         try {
           const snap = await getDoc(doc(db, "users", emailToId(email)));
-          return snap.exists() ? "fast.html" : "login.html";
+          if (!snap.exists()) {
+            clearSession();
+            return "login.html";
+          }
+          return isProfileComplete(snap.data()) ? "fast.html" : "profile.html";
         } catch {
           return "login.html";
         }

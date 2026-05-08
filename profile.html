@@ -164,6 +164,11 @@
     formMsg.textContent = '';
 
     if (!name) { formMsg.textContent = '⚠️ Display name is required.'; formMsg.className = 'msg error'; return; }
+    if (!avatarFile.files[0] && !(avatarUrl || '').trim()) {
+      formMsg.textContent = '⚠️ Profile picture is required.';
+      formMsg.className = 'msg error';
+      return;
+    }
 
     saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; saveBtn.disabled = true;
 
@@ -188,6 +193,7 @@
         email, username: name, status,
         usernameLower,
         avatar: avatarUrl || '',
+        profileCompleted: true,
         online: true,
         createdAt: serverTimestamp(),
         lastSeen: serverTimestamp()

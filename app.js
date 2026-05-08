@@ -27,6 +27,11 @@ const getSession = () => {
   const x = +localStorage.getItem('fastline_session_expiry');
   return (e && Date.now() < x) ? e : null;
 };
+const isProfileComplete = (user) => {
+  const hasUsername = !!(user?.username || '').trim();
+  const hasAvatar = !!(user?.avatar || '').trim();
+  return hasUsername && hasAvatar;
+};
 
 function toast(msg, color = 'var(--accent)') {
   const t = document.createElement('div');
@@ -91,6 +96,7 @@ async function init() {
   const snap = await getDoc(userRef);
 
   if (!snap.exists()) { window.location.href = 'profile.html'; return; }
+  if (!isProfileComplete(snap.data())) { window.location.href = 'profile.html'; return; }
 
   currentUser = {
     email,
@@ -846,7 +852,7 @@ $('avatarInput').addEventListener('change', async e => {
     $('profileAvatarImg').src = url;
     $('sidebarAvatar').src = url;
     currentUser.avatar = url;
-    await updateDoc(doc(db, 'users', currentUser.id), { avatar: url });
+    await updateDoc(doc(db, 'users', currentUser.id), { avatar: url, profileCompleted: true });
     toast('Avatar updated!');
   } catch (err) { toast('Upload failed', 'var(--error)'); }
   $('avatarInput').value = '';
@@ -861,7 +867,12 @@ $('saveProfileBtn').addEventListener('click', async () => {
       toast('Username already taken. Choose another.', 'var(--error)');
       return;
     }
-    await updateDoc(doc(db, 'users', currentUser.id), { username: name, usernameLower: normalizeUsername(name), status });
+    await updateDoc(doc(db, 'users', currentUser.id), {
+      username: name,
+      usernameLower: normalizeUsername(name),
+      status,
+      profileCompleted: !!(name && (currentUser.avatar || '').trim())
+    });
     currentUser.displayName = name; currentUser.status = status;
     $('sidebarName').textContent = name;
     toast('Profile saved!');
