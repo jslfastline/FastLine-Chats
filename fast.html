@@ -24,41 +24,20 @@
     />
     <link rel="stylesheet" href="style.css" />
     <style>
-      .pwa-install-bar {
-        position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
-        background: linear-gradient(135deg, rgba(14,14,16,0.98), rgba(20,20,28,0.98));
-        border-top: 1px solid rgba(0,191,255,0.3);
-        padding: 12px 20px; display: flex; align-items: center; gap: 12px;
-        backdrop-filter: blur(16px); font-family: 'DM Sans', sans-serif;
-        animation: slideUp 0.4s cubic-bezier(0.2,0.9,0.4,1);
-      }
-      @keyframes slideUp { from { transform: translateY(100%); } to { transform: none; } }
-      .pwa-install-bar .pwa-icon {
-        width: 40px; height: 40px; border-radius: 10px;
-        background: rgba(0,191,255,0.12); border: 1.5px solid rgba(0,191,255,0.3);
-        display: flex; align-items: center; justify-content: center;
-        color: #00BFFF; font-size: 1.2rem; flex-shrink: 0;
-      }
-      .pwa-install-bar .pwa-text { flex: 1; min-width: 0; }
-      .pwa-install-bar .pwa-text strong { color: #fff; font-size: 0.9rem; font-family: 'Syne', sans-serif; display: block; }
-      .pwa-install-bar .pwa-text small { color: rgba(255,255,255,0.5); font-size: 0.75rem; }
-      .pwa-install-bar .pwa-install-btn {
+      .pwa-install-fab {
+        position: fixed; bottom: 20px; right: 20px; z-index: 9998;
         background: linear-gradient(135deg, #00BFFF, #1E90FF); border: none;
-        border-radius: 10px; padding: 9px 18px; color: #000; font-weight: 700;
-        font-size: 0.82rem; cursor: pointer; font-family: 'Syne', sans-serif; white-space: nowrap;
+        border-radius: 50px; padding: 10px 16px; color: #000; font-weight: 700;
+        font-size: 0.78rem; font-family: 'Syne', sans-serif; cursor: pointer;
+        display: flex; align-items: center; gap: 8px;
+        box-shadow: 0 4px 20px rgba(0,191,255,0.35), 0 2px 8px rgba(0,0,0,0.3);
+        transition: transform 0.2s, box-shadow 0.2s;
       }
-      .pwa-install-bar .pwa-close-btn {
-        background: transparent; border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 10px; padding: 9px 12px; color: rgba(255,255,255,0.5);
-        font-size: 0.82rem; cursor: pointer;
-      }
-      .pwa-install-bar.hidden { display: none !important; }
-      #installPwaBtnFixed {
-        position: fixed; bottom: 0; left: 0; right: 0; z-index: 9998;
-        background: linear-gradient(135deg,#00BFFF,#1E90FF); border: none;
-        padding: 14px; color: #000; font-weight: 700; font-size: 0.95rem;
-        font-family: 'Syne', sans-serif; cursor: pointer; letter-spacing: 1px;
-        display: none; align-items: center; justify-content: center; gap: 10px;
+      .pwa-install-fab:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(0,191,255,0.45); }
+      .pwa-install-fab.hidden { display: none !important; }
+      .pwa-install-fab.installed { opacity: 0.5; pointer-events: none; }
+      @media (max-width: 768px) {
+        .pwa-install-fab { bottom: 80px; right: 16px; }
       }
     </style>
   </head>
@@ -286,26 +265,29 @@
 
     <!-- New Chat Modal -->
     <div class="modal-overlay hidden" id="newChatModal">
-      <div class="modal">
+      <div class="modal modal-new-chat">
         <div class="modal-header">
-          <h2><i class="fas fa-user-plus"></i> New Chat</h2>
+          <div>
+            <h2><i class="fas fa-user-plus"></i> New Chat</h2>
+            <span class="modal-subtitle" id="userSearchCount">Browse registered users</span>
+          </div>
           <button class="icon-btn modal-close" data-modal="newChatModal">
             <i class="fas fa-times"></i>
           </button>
         </div>
         <div class="modal-body">
-          <div class="search-bar" style="margin-bottom: 1rem">
+          <div class="search-bar search-bar-modal">
             <i class="fas fa-search search-icon"></i>
             <input
               type="text"
               id="userSearchInput"
-              placeholder="Search users by email or name…"
+              placeholder="Search by username…"
               autocomplete="off"
             />
           </div>
-          <div class="user-list-scroll" style="max-height: 50vh; overflow-y: auto;" id="userSearchResults">
+          <div class="user-list-scroll" id="userSearchResults">
             <div class="search-hint">
-              <i class="fas fa-info-circle"></i> Type to find users, or scroll to see all
+              <i class="fas fa-spinner fa-spin"></i> Loading registered users…
             </div>
           </div>
         </div>
@@ -375,7 +357,20 @@
         </div>
         <div class="modal-body">
           <div class="settings-section">
-            <h3>Theme</h3>
+            <h3>Appearance</h3>
+            <p class="settings-desc">Switch between dark and light mode</p>
+            <div class="appearance-toggle" id="appearanceToggle">
+              <button type="button" class="appearance-btn" data-mode="dark" id="darkModeBtn">
+                <i class="fas fa-moon"></i> Dark
+              </button>
+              <button type="button" class="appearance-btn" data-mode="light" id="lightModeBtn">
+                <i class="fas fa-sun"></i> Light
+              </button>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Color Theme</h3>
+            <p class="settings-desc">Accent style for the interface</p>
             <div class="theme-options">
               <button class="theme-option" data-theme="cyberpunk">Cyberpunk</button>
               <button class="theme-option" data-theme="minimal">Minimal</button>
@@ -525,20 +520,9 @@
       <span class="reaction-opt" data-emoji="🔥">🔥</span>
     </div>
 
-    <!-- PWA Install Bar (visible when not installed) -->
-    <div id="pwaInstallBar" class="pwa-install-bar hidden">
-      <div class="pwa-icon"><i class="fas fa-bolt"></i></div>
-      <div class="pwa-text">
-        <strong>Install FastLine Chats</strong>
-        <small>Add to home screen for best experience</small>
-      </div>
-      <button class="pwa-install-btn" id="pwaInstallBtn">Install</button>
-      <button class="pwa-close-btn" id="pwaDismissBtn">&times;</button>
-    </div>
-
-    <!-- Persistent big install button for bottom of app -->
-    <button id="installPwaBtnFixed">
-      <i class="fas fa-download"></i> Install FastLine Chats App
+    <!-- Small floating Install App button -->
+    <button id="installPwaBtn" class="pwa-install-fab hidden" title="Install App">
+      <i class="fas fa-download"></i> Install App
     </button>
 
     <!-- Toast Notifications -->
@@ -562,89 +546,56 @@
     <script>
       (function() {
         let deferredPrompt = null;
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-          e.preventDefault();
-          deferredPrompt = e;
-          showInstallUI();
-        });
-
-        window.addEventListener('appinstalled', () => {
-          deferredPrompt = null;
-          document.getElementById('pwaInstallBar').classList.add('hidden');
-          const btn = document.getElementById('installPwaBtnFixed');
-          btn.textContent = '✓ Installed';
-          btn.disabled = true;
-          btn.style.opacity = '0.5';
-        });
-
-        function showInstallUI() {
-          if (isStandalone()) return;
-          if (localStorage.getItem('fastline_pwa_dismissed')) return;
-          document.getElementById('pwaInstallBar').classList.remove('hidden');
-        }
+        const fab = document.getElementById('installPwaBtn');
 
         function isStandalone() {
           return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
         }
 
-        document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
-          if (!deferredPrompt) { showFallback(); return; }
-          deferredPrompt.prompt();
-          const result = await deferredPrompt.userChoice;
-          deferredPrompt = null;
-          document.getElementById('pwaInstallBar').classList.add('hidden');
-          if (result.outcome === 'accepted') {
-            document.getElementById('installPwaBtnFixed').textContent = '✓ Installed';
-            document.getElementById('installPwaBtnFixed').disabled = true;
-          }
-        });
-
-        document.getElementById('pwaDismissBtn').addEventListener('click', () => {
-          localStorage.setItem('fastline_pwa_dismissed', '1');
-          document.getElementById('pwaInstallBar').classList.add('hidden');
-        });
-
-        document.getElementById('installPwaBtnFixed').addEventListener('click', async () => {
-          if (isStandalone()) { showToast('✓ Already installed!'); return; }
-          if (!deferredPrompt) { showFallback(); return; }
-          deferredPrompt.prompt();
-          const result = await deferredPrompt.userChoice;
-          deferredPrompt = null;
-          if (result.outcome === 'accepted') {
-            document.getElementById('installPwaBtnFixed').textContent = '✓ Installed';
-            document.getElementById('installPwaBtnFixed').disabled = true;
-            showToast('✅ FastLine Chats installed!');
-          } else {
-            showToast('❌ Installation cancelled');
-          }
-        });
-
-        function showFallback() {
-          showToast('⚙️ Open browser menu → "Add to Home Screen" to install');
+        function markInstalled() {
+          fab.classList.add('installed');
+          fab.innerHTML = '<i class="fas fa-check"></i> Installed';
         }
+
+        function showFab() {
+          if (isStandalone()) { markInstalled(); return; }
+          fab.classList.remove('hidden');
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferredPrompt = e;
+          showFab();
+        });
+
+        window.addEventListener('appinstalled', () => {
+          deferredPrompt = null;
+          markInstalled();
+        });
+
+        fab.addEventListener('click', async () => {
+          if (isStandalone()) return;
+          if (!deferredPrompt) {
+            showToast('Open browser menu → "Add to Home Screen" to install');
+            return;
+          }
+          deferredPrompt.prompt();
+          const result = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          if (result.outcome === 'accepted') markInstalled();
+        });
 
         function showToast(msg) {
           const t = document.createElement('div');
           t.className = 'toast-notif';
-          t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(14,14,16,.95);border:1px solid rgba(0,191,255,.3);border-radius:12px;padding:10px 20px;font-size:.85rem;color:#fff;font-family:"DM Sans",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5);backdrop-filter:blur(12px);animation:fadeIn .3s ease;white-space:nowrap;';
+          t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(14,14,16,.95);border:1px solid rgba(0,191,255,.3);border-radius:12px;padding:10px 20px;font-size:.85rem;color:#fff;font-family:"DM Sans",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5);backdrop-filter:blur(12px);white-space:nowrap;';
           t.textContent = msg;
           document.body.appendChild(t);
           setTimeout(() => t.remove(), 4000);
         }
 
-        if (isStandalone()) {
-          document.getElementById('installPwaBtnFixed').textContent = '✓ Installed';
-          document.getElementById('installPwaBtnFixed').disabled = true;
-          document.getElementById('installPwaBtnFixed').style.opacity = '0.5';
-        }
-
-        // Also show install button after a delay if not standalone
-        if (!isStandalone()) {
-          setTimeout(() => {
-            document.getElementById('installPwaBtnFixed').style.display = 'flex';
-          }, 2000);
-        }
+        if (isStandalone()) markInstalled();
+        else setTimeout(showFab, 1500);
       })();
     </script>
 

@@ -150,7 +150,29 @@ function renderSidebarUser() {
 }
 
 function isRegisteredUser(user) {
-  return !!(user?.profileCompleted && (user?.username || '').trim());
+  const hasUsername = !!(user?.username || '').trim();
+  const hasAvatar = !!(user?.avatar || '').trim();
+  return user?.profileCompleted === true || (hasUsername && hasAvatar);
+}
+
+function matchesUserSearch(user, filter) {
+  if (!filter) return true;
+  const q = filter.trim().toLowerCase();
+  const username = (user.username || '').toLowerCase();
+  const usernameLower = (user.usernameLower || normalizeUsername(user.username || '')).toLowerCase();
+  return username.includes(q) || usernameLower.includes(q);
+}
+
+let loadUsersRequestId = 0;
+let usersModalUnsub = null;
+
+async function fetchRegisteredUsers() {
+  const snap = await getDocs(query(collection(db, 'users')));
+  return snap.docs
+    .filter(d => d.id !== currentUser.id)
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(u => isRegisteredUser(u) && !isUserHidden(u.id))
+    .sort((a, b) => (a.username || '').localeCompare(b.username || '', undefined, { sensitivity: 'base' }));
 }
 
 function isUserHidden(userId) {
@@ -755,53 +777,112 @@ $('sendRecBtn').addEventListener('click', async () => {
 
 function openNewChatModal() {
   $('newChatModal').classList.remove('hidden');
+  $('userSearchInput').value = '';
   $('userSearchInput').focus();
-  // Load all users immediately
-  loadAllUsers();
+  loadAllUsers('');
+  startUsersLiveRefresh();
 }
 
-async function loadAllUsers(filter = '') {
+function stopUsersLiveRefresh() {
+  if (usersModalUnsub) {
+    usersModalUnsub();
+    usersModalUnsub = null;
+  }
+}
+
+function startUsersLiveRefresh() {
+  stopUsersLiveRefresh();
+  usersModalUnsub = onSnapshot(query(collection(db, 'users')), () => {
+    if (!$('newChatModal').classList.contains('hidden')) {
+      loadAllUsers($('userSearchInput').value.trim(), { silent: true });
+    }
+  });
+}
+
+function renderUserResults(users, container) {
+  container.innerHTML = '';
+  users.slice(0, 50).forEach(data => {
+    const el = document.createElement('div');
+    el.className = 'user-result-item';
+    el.innerHTML = `
+      <div class="user-result-avatar-wrap">
+        <img src="${data.avatar || 'default-profile.png'}" alt="${escapeHtml(data.username)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(data.username||'U')}&background=00BFFF&color=000'" />
+        ${data.online ? '<span class="user-result-online"></span>' : ''}
+      </div>
+      <div class="user-result-info">
+        <div class="result-name">${escapeHtml(data.username)}</div>
+        <div class="result-email">${escapeHtml(data.status || 'Available')}</div>
+      </div>
+      <button class="start-chat-btn"><i class="fas fa-comment"></i> Chat</button>
+    `;
+    el.querySelector('.start-chat-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      stopUsersLiveRefresh();
+      startChatWith(data.id, data);
+    });
+    el.addEventListener('click', () => {
+      stopUsersLiveRefresh();
+      startChatWith(data.id, data);
+    });
+    container.appendChild(el);
+  });
+}
+
+async function loadAllUsers(filter = '', opts = {}) {
+  const reqId = ++loadUsersRequestId;
   const results = $('userSearchResults');
-  results.innerHTML = '<div class="search-hint"><i class="fas fa-spinner fa-spin"></i> Loading users…</div>';
+  const countEl = $('userSearchCount');
+
+  if (!opts.silent) {
+    results.innerHTML = '<div class="search-hint"><i class="fas fa-spinner fa-spin"></i> Loading users…</div>';
+  }
+
   try {
-    const snap = await getDocs(query(collection(db, 'users'), limit(100)));
-    let users = snap.docs
-      .filter(d => d.id !== currentUser.id)
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(u => isRegisteredUser(u) && !isUserHidden(u.id));
+    let users = await fetchRegisteredUsers();
+
+    if (reqId !== loadUsersRequestId) return;
 
     if (filter) {
-      const q = filter.toLowerCase();
-      users = users.filter(u => (u.username || '').toLowerCase().includes(q));
+      users = users.filter(u => matchesUserSearch(u, filter));
     }
+
+    if (countEl) {
+      countEl.textContent = users.length
+        ? `${users.length} registered user${users.length !== 1 ? 's' : ''}`
+        : 'No matches';
+    }
+
     if (users.length === 0) {
-      results.innerHTML = '<div class="search-hint"><i class="fas fa-info-circle"></i> No registered users found</div>';
+      results.innerHTML = filter
+        ? `<div class="search-hint"><i class="fas fa-user-slash"></i> No users match "<strong>${escapeHtml(filter)}</strong>"<br><small>Try a different spelling or browse all users below</small></div>`
+        : '<div class="search-hint"><i class="fas fa-info-circle"></i> No other registered users yet.<br><small>Ask friends to sign up and complete their profile.</small></div>';
+      if (filter) {
+        const allUsers = await fetchRegisteredUsers();
+        if (reqId !== loadUsersRequestId) return;
+        if (allUsers.length > 0) {
+          const browse = document.createElement('div');
+          browse.className = 'search-browse-all';
+          browse.innerHTML = '<button type="button" class="btn-link" id="browseAllUsersBtn">Show all registered users</button>';
+          results.appendChild(browse);
+          browse.querySelector('#browseAllUsersBtn').addEventListener('click', () => {
+            $('userSearchInput').value = '';
+            loadAllUsers('');
+          });
+        }
+      }
       return;
     }
-    results.innerHTML = '';
-    users.slice(0, 30).forEach(data => {
-      const el = document.createElement('div');
-      el.className = 'user-result-item';
-      el.innerHTML = `
-        <img src="${data.avatar || 'default-profile.png'}" alt="${data.username}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(data.username||'U')}&background=00BFFF&color=000'" />
-        <div class="user-result-info">
-          <div class="result-name">${escapeHtml(data.username)}</div>
-          <div class="result-email">${escapeHtml(data.status || 'Available')}</div>
-        </div>
-        <button class="start-chat-btn">Chat</button>
-      `;
-      el.querySelector('.start-chat-btn').addEventListener('click', () => startChatWith(data.id, data));
-      results.appendChild(el);
-    });
+
+    renderUserResults(users, results);
   } catch (err) {
-    results.innerHTML = `<div class="search-hint">Error: ${err.message}</div>`;
+    if (reqId !== loadUsersRequestId) return;
+    results.innerHTML = `<div class="search-hint"><i class="fas fa-exclamation-circle"></i> Error: ${escapeHtml(err.message)}</div>`;
   }
 }
 
 $('userSearchInput').addEventListener('input', debounce(() => {
-  const q = $('userSearchInput').value.trim();
-  loadAllUsers(q);
-}, 400));
+  loadAllUsers($('userSearchInput').value.trim());
+}, 250));
 
 async function startChatWith(peerId, peerData) {
   // Find or create conversation
@@ -819,6 +900,8 @@ async function startChatWith(peerId, peerData) {
     });
   }
   $('newChatModal').classList.add('hidden');
+  $('userSearchInput').value = '';
+  stopUsersLiveRefresh();
   openChat(convId, { ...peerData, id: peerId });
 }
 
@@ -989,17 +1072,37 @@ $('saveProfileBtn').addEventListener('click', async () => {
 
 function applyTheme() {
   const isLight = localStorage.getItem('fastline_theme') === 'light';
-  const themeName = isLight ? 'light' : 'cyberpunk';
+  const themeName = isLight ? 'light' : (localStorage.getItem('fastline_theme_name') || 'cyberpunk');
   ThemeManager.apply(themeName);
   document.body.classList.toggle('dark-mode', !isLight);
   document.body.classList.toggle('light-mode', isLight);
   $('themeIcon').className = isLight ? 'fas fa-sun' : 'fas fa-moon';
+  syncAppearanceButtons(isLight);
+}
+
+function syncAppearanceButtons(isLight) {
+  $('darkModeBtn')?.classList.toggle('active', !isLight);
+  $('lightModeBtn')?.classList.toggle('active', isLight);
+}
+
+function setAppearanceMode(mode) {
+  const isLight = mode === 'light';
+  localStorage.setItem('fastline_theme', isLight ? 'light' : 'dark');
+  if (isLight) {
+    ThemeManager.apply('light');
+    document.querySelectorAll('.theme-option').forEach(b => b.classList.remove('active'));
+    document.querySelector('.theme-option[data-theme="light"]')?.classList.add('active');
+  } else {
+    const saved = localStorage.getItem('fastline_theme_name') || 'cyberpunk';
+    ThemeManager.apply(saved);
+    document.querySelectorAll('.theme-option').forEach(b => b.classList.toggle('active', b.dataset.theme === saved));
+  }
+  applyTheme();
 }
 
 $('themeToggleBtn').addEventListener('click', () => {
-  const isNowLight = document.body.classList.contains('dark-mode');
-  localStorage.setItem('fastline_theme', isNowLight ? 'light' : 'dark');
-  applyTheme();
+  const isLight = document.body.classList.contains('dark-mode');
+  setAppearanceMode(isLight ? 'light' : 'dark');
 });
 
 // ════════════════════════════════════════════════════
@@ -1155,36 +1258,39 @@ function renderGroupMemberChips() {
 
 async function loadGroupMemberSearch(filter = '') {
   const results = $('groupMemberResults');
-  const snap = await getDocs(query(collection(db, 'users'), limit(100)));
-  let users = snap.docs
-    .filter(d => d.id !== currentUser.id)
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(u => isRegisteredUser(u) && !isUserHidden(u.id))
-    .filter(u => !groupSelectedMembers.some(m => m.id === u.id));
+  let users = await fetchRegisteredUsers();
+  users = users.filter(u => !groupSelectedMembers.some(m => m.id === u.id));
 
   if (filter) {
-    const q = filter.toLowerCase();
-    users = users.filter(u => (u.username || '').toLowerCase().includes(q));
+    users = users.filter(u => matchesUserSearch(u, filter));
   }
 
-  results.innerHTML = users.slice(0, 15).map(u => `
-    <div class="user-result-item" data-id="${u.id}">
-      <img src="${u.avatar || 'default-profile.png'}" alt="" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=00BFFF&color=000'" />
-      <div class="user-result-info"><div class="result-name">${escapeHtml(u.username)}</div></div>
-      <button class="start-chat-btn add-member-btn">Add</button>
-    </div>
-  `).join('') || '<div class="search-hint">No users found</div>';
+  if (users.length === 0) {
+    results.innerHTML = '<div class="search-hint">No registered users found</div>';
+    return;
+  }
+
+  results.innerHTML = '';
+  renderUserResults(users.slice(0, 15).map(u => ({
+    ...u,
+    status: u.status || 'Tap to add'
+  })), results);
 
   results.querySelectorAll('.user-result-item').forEach(el => {
-    el.querySelector('.add-member-btn').addEventListener('click', () => {
-      const id = el.dataset.id;
-      const user = users.find(u => u.id === id);
-      if (user && !groupSelectedMembers.some(m => m.id === id)) {
-        groupSelectedMembers.push({ id, username: user.username });
+    const name = el.querySelector('.result-name')?.textContent;
+    const user = users.find(u => u.username === name);
+    if (!user) return;
+    el.querySelector('.start-chat-btn').textContent = 'Add';
+    el.querySelector('.start-chat-btn').innerHTML = '<i class="fas fa-plus"></i> Add';
+    const addUser = () => {
+      if (!groupSelectedMembers.some(m => m.id === user.id)) {
+        groupSelectedMembers.push({ id: user.id, username: user.username });
         renderGroupMemberChips();
         loadGroupMemberSearch($('groupMemberSearch').value.trim());
       }
-    });
+    };
+    el.querySelector('.start-chat-btn').onclick = (e) => { e.stopPropagation(); addUser(); };
+    el.onclick = addUser;
   });
 }
 
@@ -1442,6 +1548,7 @@ function setupUI() {
   $('settingsBtn').addEventListener('click', () => {
     $('settingsModal').classList.remove('hidden');
     renderHiddenUsersList();
+    syncAppearanceButtons(localStorage.getItem('fastline_theme') === 'light');
   });
 
   // Back button (mobile)
@@ -1455,14 +1562,19 @@ function setupUI() {
   // Close modals
   document.querySelectorAll('.modal-close').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.getElementById(btn.dataset.modal)?.classList.add('hidden');
+      const modalId = btn.dataset.modal;
+      document.getElementById(modalId)?.classList.add('hidden');
+      if (modalId === 'newChatModal') stopUsersLiveRefresh();
     });
   });
 
   // Close modal on overlay click
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.addEventListener('click', e => {
-      if (e.target === overlay) overlay.classList.add('hidden');
+      if (e.target === overlay) {
+        overlay.classList.add('hidden');
+        if (overlay.id === 'newChatModal') stopUsersLiveRefresh();
+      }
     });
   });
 
@@ -1490,20 +1602,25 @@ function setupUI() {
     });
   });
 
-  // Settings modal
+  // Appearance (Dark / Light)
+  $('darkModeBtn')?.addEventListener('click', () => setAppearanceMode('dark'));
+  $('lightModeBtn')?.addEventListener('click', () => setAppearanceMode('light'));
+  syncAppearanceButtons(localStorage.getItem('fastline_theme') === 'light');
+
+  // Color theme presets
   document.querySelectorAll('.theme-option').forEach(btn => {
     btn.addEventListener('click', () => {
       const theme = btn.dataset.theme;
       ThemeManager.apply(theme);
+      localStorage.setItem('fastline_theme_name', theme);
       document.querySelectorAll('.theme-option').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      // Update localStorage for light/dark
       if (theme === 'light') {
         localStorage.setItem('fastline_theme', 'light');
       } else {
         localStorage.setItem('fastline_theme', 'dark');
       }
-      applyTheme(); // To update icon and class
+      applyTheme();
     });
   });
 
