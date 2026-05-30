@@ -4,9 +4,10 @@
 // ════════════════════════════════════════════════════
 
 import { app, db, storage } from './scripts/firebase-config.js';
-import { TypingIndicator, enableSwipeToReply, generateSmartReplies, renderSmartReplies, shouldShowDateSep, formatDateSep, markMessagesRead, updateTabTitle } from './components/chat.js';
+import { TypingIndicator, enableSwipeToReply, generateSmartReplies, renderSmartReplies, shouldShowDateSep, formatDateSep, markMessagesRead, updateTabTitle, isMessageHiddenForUser, deleteMessageForMe, deleteMessageForEveryone, getSelectedTextInBubble } from './components/chat.js';
 import { setOnlineStatus, sendLocalNotification, requestNotificationPermission, ThemeManager } from './components/profile.js';
 import { WebRTCCall, showIncomingCallUI, CallTimer } from './components/video-call.js';
+import { openImageCropper } from './components/image-cropper.js';
 import {
   collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, serverTimestamp, getDocs, limit
@@ -70,13 +71,19 @@ async function isUsernameTaken(name, currentUserId) {
 // STATE
 // ════════════════════════════════════════════════════
 
-let currentUser = null;        // { email, id, displayName, avatar, status }
+let currentUser = null;        // { email, id, displayName, avatar, status, hiddenUsers }
 let activeChatId = null;       // Current conversation ID
 let activePeer = null;         // Peer user data
 let msgUnsubscribe = null;     // Firestore realtime listener cleanup
 let convsUnsubscribe = null;
+let statusUnsubscribe = null;
+let groupsUnsubscribe = null;
+let incomingCallUnsubs = [];
 let replyTarget = null;        // Message being replied to
 let contextTarget = null;      // Message for context menu
+let messageCache = new Map();  // msgId -> data for swipe reply meta
+let lastMsgSnapshotKey = '';   // Detect new incoming messages for notifications
+let groupSelectedMembers = []; // For group creation
 let mediaRecorder = null;
 let audioChunks = [];
 let recInterval = null;
@@ -103,7 +110,8 @@ async function init() {
     id: userId,
     displayName: snap.data().username || email.split('@')[0],
     avatar: snap.data().avatar || 'images/default-profile.png',
-    status: snap.data().status || 'Hey there! I\'m using FastLine.'
+    status: snap.data().status || 'Hey there! I\'m using FastLine.',
+    hiddenUsers: snap.data().hiddenUsers || []
   };
 
   // Update online status
@@ -114,6 +122,9 @@ async function init() {
 
   renderSidebarUser();
   listenConversations();
+  listenStatusUpdates();
+  listenGroups();
+  setupIncomingCalls();
   setupUI();
   updateView();
   applyTheme();
@@ -130,12 +141,26 @@ async function init() {
 
 function renderSidebarUser() {
   $('sidebarName').textContent = currentUser.displayName;
-  $('sidebarStatus').textContent = 'Online';
+  $('sidebarStatus').textContent = currentUser.status || 'Online';
   $('sidebarAvatar').src = currentUser.avatar;
   $('profileAvatarImg').src = currentUser.avatar;
   $('profileDisplayName').value = currentUser.displayName;
   $('profileStatusMsg').value = currentUser.status;
   $('profileEmail').textContent = currentUser.email;
+}
+
+function isRegisteredUser(user) {
+  return !!(user?.profileCompleted && (user?.username || '').trim());
+}
+
+function isUserHidden(userId) {
+  return (currentUser?.hiddenUsers || []).includes(userId);
+}
+
+async function refreshHiddenUsers() {
+  const snap = await getDoc(doc(db, 'users', currentUser.id));
+  if (snap.exists()) currentUser.hiddenUsers = snap.data().hiddenUsers || [];
+  renderHiddenUsersList();
 }
 
 // ════════════════════════════════════════════════════
@@ -157,9 +182,11 @@ function listenConversations() {
       const data = d.data();
       const peerId = data.members.find(m => m !== currentUser.id);
       if (!peerId) continue;
+      if (isUserHidden(peerId)) continue;
       const peerSnap = await getDoc(doc(db, 'users', peerId));
       if (!peerSnap.exists()) continue;
-      const peer = peerSnap.data();
+      const peer = { ...peerSnap.data(), id: peerId };
+      if (!isRegisteredUser(peer)) continue;
       const item = buildConvItem(d.id, peer, data);
       list.appendChild(item);
     }
@@ -189,7 +216,7 @@ function buildConvItem(convId, peer, data) {
       ${peer.online ? '<span class="conv-online"></span>' : ''}
     </div>
     <div class="conv-body">
-      <div class="conv-name">${peer.username || peer.email || 'Unknown'}</div>
+      <div class="conv-name">${escapeHtml(peer.username)}</div>
       <div class="conv-last">${escapeHtml(lastMsg.substring(0, 50))}</div>
     </div>
     <div class="conv-meta">
@@ -208,7 +235,8 @@ function buildConvItem(convId, peer, data) {
 
 async function openChat(convId, peer) {
   activeChatId = convId;
-  activePeer   = peer;
+  activePeer   = { ...peer, id: peer.id || convId };
+  lastMsgSnapshotKey = '';
 
   await updateDoc(doc(db, 'conversations', convId), {
     [`unreadCount.${currentUser.id}`]: 0
@@ -216,7 +244,7 @@ async function openChat(convId, peer) {
 
   updateView();
 
-  $('chatPeerName').textContent  = peer.username || peer.email || 'User';
+  $('chatPeerName').textContent  = peer.username || 'User';
   $('chatPeerAvatar').src        = peer.avatar || 'images/default-profile.png';
   $('chatPeerStatus').textContent = peer.online ? 'Online' : 'Offline';
   $('chatPeerStatus').className  = 'peer-status' + (peer.online ? ' online' : '');
@@ -243,13 +271,16 @@ async function openChat(convId, peer) {
     $('smartRepliesBar').classList.add('hidden');
   };
 
-  // Swipe-to-reply
+  // Swipe-to-reply (supports selected text)
   enableSwipeToReply($('messagesArea'), (target) => {
-    replyTarget = { id: target.id, text: target.text, senderName: target.senderName || peer.username };
+    replyTarget = { id: target.id, text: target.text, senderName: target.senderName || activePeer?.username || 'User' };
     $('replyAuthor').textContent = replyTarget.senderName;
     $('replyText').textContent   = replyTarget.text || '[media]';
     $('replyPreview').classList.remove('hidden');
     $('msgInput').focus();
+  }, (msgId) => {
+    const data = messageCache.get(msgId);
+    return { senderName: data?.senderName || activePeer?.username };
   });
 
   if (msgUnsubscribe) msgUnsubscribe();
@@ -279,42 +310,64 @@ function listenMessages(convId) {
     const area = $('messagesArea');
     const wasAtBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 60;
 
-    snap.docChanges().forEach(change => {
-      if (change.type === 'added') {
-        renderMessage(change.doc.id, change.doc.data(), area);
-        const msgData = change.doc.data();
-        // Mark as read if from peer
-        if (msgData.senderId !== currentUser.id) {
-          updateDoc(doc(db, 'conversations', convId, 'messages', change.doc.id), { status: 'read' });
-          // Show smart replies
-          if (msgData.type === 'text' && msgData.text) {
-            const replies = generateSmartReplies(msgData.text);
-            const bar = $('smartRepliesBar');
-            renderSmartReplies(bar, replies, (reply) => {
-              $('msgInput').textContent = reply;
-              bar.classList.add('hidden');
-              sendMessage();
-            });
-            bar.classList.remove('hidden');
-          }
-          // Local push notification if app not focused
+    area.innerHTML = '';
+    messageCache.clear();
+    let prevData = null;
+
+    snap.docs.forEach(docSnap => {
+      const msgId = docSnap.id;
+      const data = docSnap.data();
+      if (isMessageHiddenForUser(data, currentUser.id)) return;
+
+      messageCache.set(msgId, data);
+
+      if (shouldShowDateSep(prevData, data)) {
+        const sep = document.createElement('div');
+        sep.className = 'date-separator';
+        sep.innerHTML = `<span>${formatDateSep(data.timestamp)}</span>`;
+        area.appendChild(sep);
+      }
+
+      renderMessage(msgId, data, area);
+      prevData = data;
+
+      if (data.senderId !== currentUser.id && data.status !== 'read') {
+        updateDoc(doc(db, 'conversations', convId, 'messages', msgId), { status: 'read' });
+      }
+    });
+
+    const snapKey = snap.docs.map(d => d.id).join(',');
+    if (snapKey !== lastMsgSnapshotKey && lastMsgSnapshotKey) {
+      const newDocs = snap.docs.filter(d => !lastMsgSnapshotKey.includes(d.id));
+      newDocs.forEach(d => {
+        const msgData = d.data();
+        if (msgData.senderId !== currentUser.id && !isMessageHiddenForUser(msgData, currentUser.id)) {
           sendLocalNotification(
             activePeer?.username || 'FastLine',
             msgData.text || '[media]',
             activePeer?.avatar || 'images/icon-192.png'
           );
         }
-      } else if (change.type === 'modified') {
-        const existing = area.querySelector(`[data-msg-id="${change.doc.id}"]`);
-        if (existing) {
-          const newEl = createMessageEl(change.doc.id, change.doc.data());
-          existing.replaceWith(newEl);
-        }
-      } else if (change.type === 'removed') {
-        const existing = area.querySelector(`[data-msg-id="${change.doc.id}"]`);
-        if (existing) existing.remove();
-      }
-    });
+      });
+    }
+    lastMsgSnapshotKey = snapKey;
+
+    // Smart replies from last peer message
+    const lastPeerMsg = [...snap.docs].reverse().map(d => d.data()).find(m =>
+      m.senderId !== currentUser.id && m.type === 'text' && m.text && !isMessageHiddenForUser(m, currentUser.id)
+    );
+    const bar = $('smartRepliesBar');
+    if (lastPeerMsg && activeChatId === convId) {
+      const replies = generateSmartReplies(lastPeerMsg.text);
+      renderSmartReplies(bar, replies, (reply) => {
+        $('msgInput').textContent = reply;
+        bar.classList.add('hidden');
+        sendMessage();
+      });
+      bar.classList.remove('hidden');
+    } else {
+      bar.classList.add('hidden');
+    }
 
     if (wasAtBottom) area.scrollTop = area.scrollHeight;
   });
@@ -330,6 +383,17 @@ function createMessageEl(msgId, data) {
   const group = document.createElement('div');
   group.className = `msg-group ${isSent ? 'sent' : 'received'}`;
   group.dataset.msgId = msgId;
+
+  if (data.deletedForAll) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-bubble-wrap';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble msg-deleted';
+    bubble.textContent = 'This message was deleted';
+    wrap.appendChild(bubble);
+    group.appendChild(wrap);
+    return group;
+  }
 
   const wrap = document.createElement('div');
   wrap.className = 'msg-bubble-wrap';
@@ -349,25 +413,25 @@ function createMessageEl(msgId, data) {
   if (data.replyTo) {
     const quote = document.createElement('div');
     quote.className = 'reply-quote';
-    quote.innerHTML = `<div class="reply-quote-author">${data.replyTo.senderName}</div>${escapeHtml(data.replyTo.text || '')}`;
+    quote.innerHTML = `<div class="reply-quote-author">${escapeHtml(data.replyTo.senderName)}</div>${escapeHtml(data.replyTo.text || '')}`;
     bubble.appendChild(quote);
   }
 
   // Content
   if (data.type === 'text') {
     const textNode = document.createElement('span');
+    textNode.className = 'msg-text';
     textNode.textContent = data.text || '';
-    // Ticks
+    bubble.appendChild(textNode);
     if (isSent) {
       const ticks = document.createElement('span');
       ticks.className = 'msg-ticks';
       if (data.status === 'read')      ticks.innerHTML = '<i class="fas fa-check-double tick-read"></i>';
       else if (data.status === 'delivered') ticks.innerHTML = '<i class="fas fa-check-double tick-delivered"></i>';
       else                              ticks.innerHTML = '<i class="fas fa-check tick-sent"></i>';
-      textNode.appendChild(document.createTextNode(' '));
-      textNode.appendChild(ticks);
+      bubble.appendChild(document.createTextNode(' '));
+      bubble.appendChild(ticks);
     }
-    bubble.appendChild(textNode);
   } else if (data.type === 'image') {
     const imgWrap = document.createElement('div');
     imgWrap.className = 'img-attach';
@@ -488,18 +552,37 @@ function showContextMenu(e, msgId, data) {
   const menu = $('contextMenu');
   menu.classList.remove('hidden');
   const x = Math.min(e.clientX || e.touches?.[0]?.clientX || 100, window.innerWidth - 180);
-  const y = Math.min(e.clientY || e.touches?.[0]?.clientY || 100, window.innerHeight - 200);
+  const y = Math.min(e.clientY || e.touches?.[0]?.clientY || 100, window.innerHeight - 280);
   menu.style.left = x + 'px';
   menu.style.top  = y + 'px';
-  // Hide edit/delete if not own msg
-  menu.querySelectorAll('[data-action="edit"],[data-action="delete"]').forEach(el => {
-    el.style.display = (data.senderId !== currentUser.id) ? 'none' : 'flex';
+
+  const isOwn = data.senderId === currentUser.id;
+  menu.querySelectorAll('[data-action="edit"]').forEach(el => {
+    el.style.display = (isOwn && data.type === 'text' && !data.deletedForAll) ? 'flex' : 'none';
   });
+  menu.querySelectorAll('[data-action="delete-all"]').forEach(el => {
+    el.style.display = (isOwn && !data.deletedForAll) ? 'flex' : 'none';
+  });
+  menu.querySelectorAll('[data-action="delete-me"]').forEach(el => {
+    el.style.display = data.deletedForAll ? 'none' : 'flex';
+  });
+
+  const bubbleEl = e.target?.closest?.('.msg-bubble') || document.querySelector(`[data-msg-id="${msgId}"] .msg-bubble`);
+  const selected = bubbleEl ? getSelectedTextInBubble(bubbleEl) : null;
+  const selBtn = $('ctxReplySelection');
+  if (selected) {
+    selBtn.classList.remove('hidden');
+    selBtn.dataset.selectedText = selected;
+  } else {
+    selBtn.classList.add('hidden');
+    delete selBtn.dataset.selectedText;
+  }
 }
 
 document.addEventListener('click', () => {
   $('contextMenu').classList.add('hidden');
   $('reactionPicker').classList.add('hidden');
+  $('chatDropdown')?.classList.add('hidden');
 });
 
 $('contextMenu').addEventListener('click', async e => {
@@ -509,12 +592,22 @@ $('contextMenu').addEventListener('click', async e => {
 
   switch (btn.dataset.action) {
     case 'reply':
-      replyTarget = { id, text: data.text, senderName: data.senderName };
-      $('replyAuthor').textContent = data.senderName;
+      replyTarget = { id, text: data.text, senderName: data.senderName || activePeer?.username };
+      $('replyAuthor').textContent = replyTarget.senderName;
       $('replyText').textContent   = data.text || '[media]';
       $('replyPreview').classList.remove('hidden');
       $('msgInput').focus();
       break;
+
+    case 'reply-selection': {
+      const selected = $('ctxReplySelection').dataset.selectedText;
+      replyTarget = { id, text: selected, senderName: data.senderName || activePeer?.username };
+      $('replyAuthor').textContent = replyTarget.senderName;
+      $('replyText').textContent   = selected;
+      $('replyPreview').classList.remove('hidden');
+      $('msgInput').focus();
+      break;
+    }
 
     case 'react':
       showReactionPicker(e, id);
@@ -533,10 +626,15 @@ $('contextMenu').addEventListener('click', async e => {
       }
       break;
 
-    case 'delete':
+    case 'delete-me':
+      await deleteMessageForMe(db, activeChatId, id, currentUser.id);
+      toast('Message deleted for you');
+      break;
+
+    case 'delete-all':
       if (data.senderId === currentUser.id) {
-        await deleteDoc(doc(db, 'conversations', activeChatId, 'messages', id));
-        toast('Message deleted');
+        await deleteMessageForEveryone(db, activeChatId, id);
+        toast('Message deleted for everyone');
       }
       break;
   }
@@ -666,28 +764,29 @@ async function loadAllUsers(filter = '') {
   const results = $('userSearchResults');
   results.innerHTML = '<div class="search-hint"><i class="fas fa-spinner fa-spin"></i> Loading users…</div>';
   try {
-    const snap = await getDocs(query(collection(db, 'users'), limit(50)));
-    let users = snap.docs.filter(d => d.id !== currentUser.id).map(d => ({ id: d.id, ...d.data() }));
+    const snap = await getDocs(query(collection(db, 'users'), limit(100)));
+    let users = snap.docs
+      .filter(d => d.id !== currentUser.id)
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(u => isRegisteredUser(u) && !isUserHidden(u.id));
+
     if (filter) {
       const q = filter.toLowerCase();
-      users = users.filter(u =>
-        (u.username || '').toLowerCase().includes(q) ||
-        (u.email || '').toLowerCase().includes(q)
-      );
+      users = users.filter(u => (u.username || '').toLowerCase().includes(q));
     }
     if (users.length === 0) {
-      results.innerHTML = '<div class="search-hint"><i class="fas fa-info-circle"></i> No users found</div>';
+      results.innerHTML = '<div class="search-hint"><i class="fas fa-info-circle"></i> No registered users found</div>';
       return;
     }
     results.innerHTML = '';
-    users.slice(0, 20).forEach(data => {
+    users.slice(0, 30).forEach(data => {
       const el = document.createElement('div');
       el.className = 'user-result-item';
       el.innerHTML = `
         <img src="${data.avatar || 'default-profile.png'}" alt="${data.username}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(data.username||'U')}&background=00BFFF&color=000'" />
         <div class="user-result-info">
-          <div class="result-name">${escapeHtml(data.username || 'User')}</div>
-          <div class="result-email">${escapeHtml(data.email || '')}</div>
+          <div class="result-name">${escapeHtml(data.username)}</div>
+          <div class="result-email">${escapeHtml(data.status || 'Available')}</div>
         </div>
         <button class="start-chat-btn">Chat</button>
       `;
@@ -844,10 +943,14 @@ $('profileThumb').addEventListener('click', () => { $('profileModal').classList.
 $('avatarInput').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
+  $('avatarInput').value = '';
+  const blob = await openImageCropper(file, { shape: 'circle', size: 'medium' });
+  if (!blob) return;
   toast('Uploading avatar…');
   try {
+    const cropped = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
     const sRef = storageRef(storage, `avatars/${currentUser.id}`);
-    await uploadBytes(sRef, file);
+    await uploadBytes(sRef, cropped);
     const url = await getDownloadURL(sRef);
     $('profileAvatarImg').src = url;
     $('sidebarAvatar').src = url;
@@ -855,7 +958,6 @@ $('avatarInput').addEventListener('change', async e => {
     await updateDoc(doc(db, 'users', currentUser.id), { avatar: url, profileCompleted: true });
     toast('Avatar updated!');
   } catch (err) { toast('Upload failed', 'var(--error)'); }
-  $('avatarInput').value = '';
 });
 
 $('saveProfileBtn').addEventListener('click', async () => {
@@ -875,6 +977,7 @@ $('saveProfileBtn').addEventListener('click', async () => {
     });
     currentUser.displayName = name; currentUser.status = status;
     $('sidebarName').textContent = name;
+    $('sidebarStatus').textContent = status || 'Online';
     toast('Profile saved!');
     $('profileModal').classList.add('hidden');
   } catch (err) { toast('Save failed: ' + err.message, 'var(--error)'); }
@@ -898,6 +1001,402 @@ $('themeToggleBtn').addEventListener('click', () => {
   localStorage.setItem('fastline_theme', isNowLight ? 'light' : 'dark');
   applyTheme();
 });
+
+// ════════════════════════════════════════════════════
+// STATUS UPDATES (Stories)
+// ════════════════════════════════════════════════════
+
+function listenStatusUpdates() {
+  statusUnsubscribe = onSnapshot(query(collection(db, 'statusUpdates')), async snap => {
+    const list = $('statusList');
+    const now = Date.now();
+    const items = [];
+
+    for (const d of snap.docs) {
+      const data = d.data();
+      if (data.expiresAt && data.expiresAt < now) continue;
+      if (isUserHidden(data.userId)) continue;
+
+      const userSnap = await getDoc(doc(db, 'users', data.userId));
+      if (!userSnap.exists() || !isRegisteredUser(userSnap.data())) continue;
+      const user = userSnap.data();
+      items.push({ id: d.id, ...data, user });
+    }
+
+    items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-circle-notch"></i></div>
+        <p>No statuses yet</p>
+        <span>Share your status with friends</span>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = '';
+    items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'status-item';
+      el.innerHTML = `
+        <div class="status-ring"><img src="${item.user.avatar || 'default-profile.png'}" alt="" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.user.username)}&background=00BFFF&color=000'" /></div>
+        <div class="status-info">
+          <div class="status-name">${escapeHtml(item.user.username)}</div>
+          <div class="status-preview">${escapeHtml(item.text || (item.imageUrl ? '📷 Photo status' : ''))}</div>
+          <div class="status-time">${formatTime(item.createdAt)}</div>
+        </div>
+      `;
+      el.addEventListener('click', () => {
+        if (item.imageUrl) window.open(item.imageUrl, '_blank');
+        else toast(`${item.user.username}: ${item.text}`);
+      });
+      list.appendChild(el);
+    });
+  });
+}
+
+async function postStatus() {
+  const text = $('statusTextInput').value.trim();
+  const imageFile = $('statusImageInput').files[0];
+  if (!text && !imageFile) { toast('Add text or a photo', 'var(--error)'); return; }
+
+  let imageUrl = null;
+  if (imageFile) {
+    const path = `status/${currentUser.id}/${Date.now()}_${imageFile.name}`;
+    const sRef = storageRef(storage, path);
+    await uploadBytes(sRef, imageFile);
+    imageUrl = await getDownloadURL(sRef);
+  }
+
+  await addDoc(collection(db, 'statusUpdates'), {
+    userId: currentUser.id,
+    text: text || '',
+    imageUrl,
+    createdAt: serverTimestamp(),
+    expiresAt: Date.now() + 24 * 60 * 60 * 1000
+  });
+
+  $('statusTextInput').value = '';
+  $('statusImageInput').value = '';
+  $('addStatusModal').classList.add('hidden');
+  toast('Status posted!');
+}
+
+// ════════════════════════════════════════════════════
+// GROUPS
+// ════════════════════════════════════════════════════
+
+function listenGroups() {
+  const q = query(
+    collection(db, 'groups'),
+    where('members', 'array-contains', currentUser.id)
+  );
+  groupsUnsubscribe = onSnapshot(q, snap => {
+    const list = $('groupsList');
+    if (snap.empty) {
+      list.innerHTML = `<div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-users"></i></div>
+        <p>No groups yet</p>
+        <span>Create your first group to get started</span>
+      </div>`;
+      return;
+    }
+    list.innerHTML = '';
+    snap.docs.forEach(d => {
+      const data = d.data();
+      const el = document.createElement('div');
+      el.className = 'group-item';
+      el.innerHTML = `
+        <div class="status-ring no-update"><i class="fas fa-users" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:1.2rem;"></i></div>
+        <div class="status-info">
+          <div class="status-name">${escapeHtml(data.name)}</div>
+          <div class="status-preview">${data.members.length} members</div>
+        </div>
+      `;
+      el.addEventListener('click', () => openGroupChat(d.id, data));
+      list.appendChild(el);
+    });
+  });
+}
+
+async function openGroupChat(groupId, groupData) {
+  const convId = `group_${groupId}`;
+  const convRef = doc(db, 'conversations', convId);
+  const snap = await getDoc(convRef);
+  if (!snap.exists()) {
+    await setDoc(convRef, {
+      members: groupData.members,
+      type: 'group',
+      groupId,
+      groupName: groupData.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastMessage: '',
+      unreadCount: {}
+    });
+  }
+  currentTab = 'chats';
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'chats'));
+  openChat(convId, { id: groupId, username: groupData.name, avatar: '', isGroup: true });
+}
+
+function renderGroupMemberChips() {
+  const chips = $('groupMemberChips');
+  chips.innerHTML = groupSelectedMembers.map(m => `
+    <span class="member-chip">${escapeHtml(m.username)}<button type="button" data-id="${m.id}">&times;</button></span>
+  `).join('');
+  chips.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      groupSelectedMembers = groupSelectedMembers.filter(m => m.id !== btn.dataset.id);
+      renderGroupMemberChips();
+    });
+  });
+}
+
+async function loadGroupMemberSearch(filter = '') {
+  const results = $('groupMemberResults');
+  const snap = await getDocs(query(collection(db, 'users'), limit(100)));
+  let users = snap.docs
+    .filter(d => d.id !== currentUser.id)
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(u => isRegisteredUser(u) && !isUserHidden(u.id))
+    .filter(u => !groupSelectedMembers.some(m => m.id === u.id));
+
+  if (filter) {
+    const q = filter.toLowerCase();
+    users = users.filter(u => (u.username || '').toLowerCase().includes(q));
+  }
+
+  results.innerHTML = users.slice(0, 15).map(u => `
+    <div class="user-result-item" data-id="${u.id}">
+      <img src="${u.avatar || 'default-profile.png'}" alt="" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=00BFFF&color=000'" />
+      <div class="user-result-info"><div class="result-name">${escapeHtml(u.username)}</div></div>
+      <button class="start-chat-btn add-member-btn">Add</button>
+    </div>
+  `).join('') || '<div class="search-hint">No users found</div>';
+
+  results.querySelectorAll('.user-result-item').forEach(el => {
+    el.querySelector('.add-member-btn').addEventListener('click', () => {
+      const id = el.dataset.id;
+      const user = users.find(u => u.id === id);
+      if (user && !groupSelectedMembers.some(m => m.id === id)) {
+        groupSelectedMembers.push({ id, username: user.username });
+        renderGroupMemberChips();
+        loadGroupMemberSearch($('groupMemberSearch').value.trim());
+      }
+    });
+  });
+}
+
+async function createGroup() {
+  const name = $('groupNameInput').value.trim();
+  if (!name) { toast('Group name required', 'var(--error)'); return; }
+  if (groupSelectedMembers.length === 0) { toast('Add at least one member', 'var(--error)'); return; }
+
+  const members = [currentUser.id, ...groupSelectedMembers.map(m => m.id)];
+  const groupRef = await addDoc(collection(db, 'groups'), {
+    name,
+    members,
+    admin: currentUser.id,
+    createdAt: serverTimestamp()
+  });
+
+  groupSelectedMembers = [];
+  $('groupNameInput').value = '';
+  renderGroupMemberChips();
+  $('createGroupModal').classList.add('hidden');
+  toast(`Group "${name}" created!`);
+  openGroupChat(groupRef.id, { name, members });
+}
+
+// ════════════════════════════════════════════════════
+// HIDE USERS & CHAT MENU
+// ════════════════════════════════════════════════════
+
+async function hideUser(userId) {
+  const hidden = [...new Set([...(currentUser.hiddenUsers || []), userId])];
+  await updateDoc(doc(db, 'users', currentUser.id), { hiddenUsers: hidden });
+  currentUser.hiddenUsers = hidden;
+  if (activePeer?.id === userId) {
+    activeChatId = null;
+    activePeer = null;
+    updateView();
+  }
+  renderHiddenUsersList();
+  toast('User hidden');
+}
+
+async function unhideUser(userId) {
+  const hidden = (currentUser.hiddenUsers || []).filter(id => id !== userId);
+  await updateDoc(doc(db, 'users', currentUser.id), { hiddenUsers: hidden });
+  currentUser.hiddenUsers = hidden;
+  renderHiddenUsersList();
+  toast('User unhidden');
+}
+
+async function renderHiddenUsersList() {
+  const list = $('hiddenUsersList');
+  if (!list) return;
+  const hidden = currentUser.hiddenUsers || [];
+  if (hidden.length === 0) {
+    list.innerHTML = '<p style="font-size:.8rem;color:var(--text-muted);">No hidden users</p>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const uid of hidden) {
+    const snap = await getDoc(doc(db, 'users', uid));
+    const name = snap.exists() ? (snap.data().username || uid) : uid;
+    const row = document.createElement('div');
+    row.className = 'hidden-user-row';
+    row.innerHTML = `<span>${escapeHtml(name)}</span><button type="button">Unhide</button>`;
+    row.querySelector('button').addEventListener('click', () => unhideUser(uid));
+    list.appendChild(row);
+  }
+}
+
+async function clearChatForMe() {
+  if (!activeChatId) return;
+  const snap = await getDocs(collection(db, 'conversations', activeChatId, 'messages'));
+  await Promise.allSettled(snap.docs.map(d =>
+    deleteMessageForMe(db, activeChatId, d.id, currentUser.id)
+  ));
+  toast('Chat cleared for you');
+}
+
+function setupChatMenu() {
+  $('chatMenuBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!activeChatId) return;
+    if (activePeer?.isGroup) { toast('Group chat options coming soon'); return; }
+    const menu = $('chatDropdown');
+    menu.classList.remove('hidden');
+    const rect = $('chatMenuBtn').getBoundingClientRect();
+    menu.style.left = Math.min(rect.left, window.innerWidth - 220) + 'px';
+    menu.style.top = (rect.bottom + 8) + 'px';
+  });
+
+  $('chatDropdown').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-chat-action]');
+    if (!btn) return;
+    $('chatDropdown').classList.add('hidden');
+
+    switch (btn.dataset.chatAction) {
+      case 'view-profile':
+        if (activePeer) {
+          $('profileModal').classList.add('hidden');
+          toast(`${activePeer.username}: ${activePeer.status || 'No status'}`);
+        }
+        break;
+      case 'search-chat':
+        $('searchChatModal').classList.remove('hidden');
+        $('chatSearchInput').focus();
+        break;
+      case 'mute': {
+        const key = `fastline_mute_${activeChatId}`;
+        const muted = localStorage.getItem(key) === '1';
+        localStorage.setItem(key, muted ? '0' : '1');
+        toast(muted ? 'Notifications unmuted' : 'Notifications muted');
+        break;
+      }
+      case 'clear-chat':
+        if (confirm('Clear all messages for you in this chat?')) await clearChatForMe();
+        break;
+      case 'hide-user':
+        if (activePeer?.id && confirm(`Hide ${activePeer.username}?`)) await hideUser(activePeer.id);
+        break;
+    }
+  });
+
+  $('chatSearchInput')?.addEventListener('input', debounce(async () => {
+    const q = $('chatSearchInput').value.trim().toLowerCase();
+    const results = $('chatSearchResults');
+    if (!q || !activeChatId) { results.innerHTML = ''; return; }
+    const snap = await getDocs(collection(db, 'conversations', activeChatId, 'messages'));
+    const matches = snap.docs.filter(d => {
+      const data = d.data();
+      return !isMessageHiddenForUser(data, currentUser.id) &&
+        (data.text || '').toLowerCase().includes(q);
+    });
+    results.innerHTML = matches.length ? matches.map(d => {
+      const data = d.data();
+      return `<div class="user-result-item" style="cursor:pointer" data-msg-id="${d.id}">
+        <div class="user-result-info">
+          <div class="result-name">${escapeHtml(data.senderName || '')}</div>
+          <div class="result-email">${escapeHtml((data.text || '').substring(0, 80))}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="search-hint">No matches</div>';
+    results.querySelectorAll('[data-msg-id]').forEach(el => {
+      el.addEventListener('click', () => {
+        const target = document.querySelector(`[data-msg-id="${el.dataset.msgId}"]`);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target?.classList.add('highlight-msg');
+        setTimeout(() => target?.classList.remove('highlight-msg'), 2000);
+        $('searchChatModal').classList.add('hidden');
+      });
+    });
+  }, 300));
+}
+
+// ════════════════════════════════════════════════════
+// INCOMING CALLS
+// ════════════════════════════════════════════════════
+
+async function setupIncomingCalls() {
+  incomingCallUnsubs.forEach(u => u());
+  incomingCallUnsubs = [];
+
+  const convSnap = await getDocs(query(
+    collection(db, 'conversations'),
+    where('members', 'array-contains', currentUser.id)
+  ));
+
+  convSnap.docs.forEach(convDoc => {
+    const unsub = onSnapshot(doc(db, 'conversations', convDoc.id), async snap => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (!data.activeCall || data.callHandledBy === currentUser.id) return;
+      if (activeCall) return;
+
+      const callSnap = await getDoc(doc(db, 'calls', data.activeCall));
+      if (!callSnap.exists() || callSnap.data().ended) return;
+      if (callSnap.data().callerId === currentUser.id) return;
+
+      const callerSnap = await getDoc(doc(db, 'users', callSnap.data().callerId));
+      const callerName = callerSnap.exists() ? callerSnap.data().username : 'Someone';
+
+      showIncomingCallUI(callerName, async () => {
+        await updateDoc(doc(db, 'conversations', convDoc.id), { callHandledBy: currentUser.id });
+        const peerSnap = await getDoc(doc(db, 'users', callSnap.data().callerId));
+        if (peerSnap.exists()) openChat(convDoc.id, { ...peerSnap.data(), id: callSnap.data().callerId });
+
+        $('callPeerName').textContent = callerName;
+        $('callStatus').textContent = 'Connecting…';
+        $('videoCallModal').classList.remove('hidden');
+
+        try {
+          const videoEnabled = callSnap.data().video !== false;
+          const localStream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: true });
+          $('localVideo').srcObject = localStream;
+
+          activeCall = new WebRTCCall(
+            db, convDoc.id, currentUser.id,
+            $('localVideo'), $('remoteVideo'),
+            (status) => { $('callStatus').textContent = status; if (status === 'Connected') callTimer.start(); },
+            () => { $('videoCallModal').classList.add('hidden'); callTimer.stop(); activeCall = null; }
+          );
+          await activeCall.answerCall(data.activeCall, videoEnabled);
+        } catch (err) {
+          toast('Could not answer call: ' + err.message, 'var(--error)');
+          $('videoCallModal').classList.add('hidden');
+        }
+      }, async () => {
+        await updateDoc(doc(db, 'conversations', convDoc.id), { activeCall: null, callHandledBy: currentUser.id });
+      });
+    });
+    incomingCallUnsubs.push(unsub);
+  });
+}
 
 // ════════════════════════════════════════════════════
 // VIEW MANAGEMENT
@@ -940,7 +1439,10 @@ function setupUI() {
   $('newChatBtn').addEventListener('click', openNewChatModal);
   $('welcomeNewChat').addEventListener('click', openNewChatModal);
   $('profileBtn').addEventListener('click', () => $('profileModal').classList.remove('hidden'));
-  $('settingsBtn').addEventListener('click', () => $('settingsModal').classList.remove('hidden'));
+  $('settingsBtn').addEventListener('click', () => {
+    $('settingsModal').classList.remove('hidden');
+    renderHiddenUsersList();
+  });
 
   // Back button (mobile)
   $('backBtn').addEventListener('click', () => {
@@ -1039,12 +1541,27 @@ function setupUI() {
 
   // Groups and Status buttons
   $('createGroupBtn').addEventListener('click', () => {
-    toast('Group creation coming soon!', 'var(--accent2)');
+    groupSelectedMembers = [];
+    renderGroupMemberChips();
+    $('groupNameInput').value = '';
+    $('createGroupModal').classList.remove('hidden');
+    loadGroupMemberSearch();
   });
 
   $('addStatusBtn').addEventListener('click', () => {
-    toast('Status updates coming soon!', 'var(--accent2)');
+    $('statusTextInput').value = '';
+    $('statusImageInput').value = '';
+    $('addStatusModal').classList.remove('hidden');
   });
+
+  $('confirmAddStatusBtn').addEventListener('click', () => postStatus().catch(err => toast(err.message, 'var(--error)')));
+  $('confirmCreateGroupBtn').addEventListener('click', () => createGroup().catch(err => toast(err.message, 'var(--error)')));
+  $('groupMemberSearch')?.addEventListener('input', debounce(() => {
+    loadGroupMemberSearch($('groupMemberSearch').value.trim());
+  }, 300));
+
+  setupChatMenu();
+  refreshHiddenUsers();
 }
 
 // ════════════════════════════════════════════════════

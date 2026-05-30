@@ -392,6 +392,13 @@
             </label>
           </div>
           <div class="settings-section">
+            <h3>Privacy</h3>
+            <div id="hiddenUsersSection">
+              <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:.5rem;">Hidden users won't appear in chats or search.</p>
+              <div class="hidden-users-list" id="hiddenUsersList"></div>
+            </div>
+          </div>
+          <div class="settings-section">
             <h3>Account</h3>
             <button class="btn-secondary" id="logoutBtn" style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 18px;color:var(--error);cursor:pointer;display:flex;align-items:center;gap:8px;font-size:0.9rem;font-family:inherit;width:100%;justify-content:center;">
               <i class="fas fa-sign-out-alt"></i> Logout
@@ -433,10 +440,79 @@
     <!-- Context Menu -->
     <div class="context-menu hidden" id="contextMenu">
       <button class="ctx-item" data-action="reply"><i class="fas fa-reply"></i> Reply</button>
+      <button class="ctx-item hidden" data-action="reply-selection" id="ctxReplySelection"><i class="fas fa-quote-right"></i> Reply to Selection</button>
       <button class="ctx-item" data-action="react"><i class="fas fa-smile"></i> React</button>
       <button class="ctx-item" data-action="copy"><i class="fas fa-copy"></i> Copy</button>
       <button class="ctx-item" data-action="edit"><i class="fas fa-edit"></i> Edit</button>
-      <button class="ctx-item danger" data-action="delete"><i class="fas fa-trash"></i> Delete</button>
+      <button class="ctx-item" data-action="delete-me"><i class="fas fa-eye-slash"></i> Delete for Me</button>
+      <button class="ctx-item danger" data-action="delete-all"><i class="fas fa-trash"></i> Delete for Everyone</button>
+    </div>
+
+    <!-- Chat Menu Dropdown -->
+    <div class="chat-dropdown hidden" id="chatDropdown">
+      <button class="ctx-item" data-chat-action="view-profile"><i class="fas fa-user"></i> View Profile</button>
+      <button class="ctx-item" data-chat-action="search-chat"><i class="fas fa-search"></i> Search in Chat</button>
+      <button class="ctx-item" data-chat-action="mute"><i class="fas fa-bell-slash"></i> Mute Notifications</button>
+      <button class="ctx-item" data-chat-action="clear-chat"><i class="fas fa-eraser"></i> Clear Chat</button>
+      <button class="ctx-item danger" data-chat-action="hide-user"><i class="fas fa-user-slash"></i> Hide User</button>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div class="modal-overlay hidden" id="createGroupModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2><i class="fas fa-users"></i> Create Group</h2>
+          <button class="icon-btn modal-close" data-modal="createGroupModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Group Name</label>
+            <input type="text" id="groupNameInput" class="input-field-modal" placeholder="Enter group name" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label>Add Members</label>
+            <input type="text" id="groupMemberSearch" class="input-field-modal" placeholder="Search registered users…" />
+            <div class="member-chips" id="groupMemberChips"></div>
+            <div class="user-list-scroll" style="max-height: 30vh; overflow-y: auto; margin-top: .8rem;" id="groupMemberResults"></div>
+          </div>
+          <button class="btn-primary full-width" id="confirmCreateGroupBtn"><i class="fas fa-check"></i> Create Group</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Status Modal -->
+    <div class="modal-overlay hidden" id="addStatusModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2><i class="fas fa-circle-notch"></i> Add Status</h2>
+          <button class="icon-btn modal-close" data-modal="addStatusModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Status Text</label>
+            <textarea id="statusTextInput" class="input-field-modal" rows="3" placeholder="What's on your mind?" maxlength="200" style="resize:vertical;min-height:80px;"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Or add a photo</label>
+            <input type="file" id="statusImageInput" accept="image/*" class="input-field-modal" style="padding:8px;" />
+          </div>
+          <button class="btn-primary full-width" id="confirmAddStatusBtn"><i class="fas fa-paper-plane"></i> Post Status</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search in Chat Modal -->
+    <div class="modal-overlay hidden" id="searchChatModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2><i class="fas fa-search"></i> Search Messages</h2>
+          <button class="icon-btn modal-close" data-modal="searchChatModal"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <input type="text" id="chatSearchInput" class="input-field-modal" placeholder="Search in this conversation…" />
+          <div id="chatSearchResults" style="max-height: 40vh; overflow-y: auto; margin-top: 1rem;"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Reaction Picker -->

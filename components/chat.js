@@ -101,8 +101,18 @@ function getTimeDiff(a, b) {
   return Math.abs(tb - ta) / 1000;
 }
 
-// ── Swipe-to-Reply (Touch) ──
-export function enableSwipeToReply(container, onReply) {
+// ── Selected text helper ──
+export function getSelectedTextInBubble(bubbleEl) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !bubbleEl) return null;
+  const range = sel.getRangeAt(0);
+  if (!bubbleEl.contains(range.commonAncestorContainer)) return null;
+  const text = sel.toString().trim();
+  return text || null;
+}
+
+// ── Swipe-to-Reply (Touch + desktop selection) ──
+export function enableSwipeToReply(container, onReply, getMsgMeta) {
   let startX = 0, startY = 0, target = null;
 
   container.addEventListener('touchstart', e => {
@@ -115,7 +125,6 @@ export function enableSwipeToReply(container, onReply) {
     if (!target) return;
     const dx = e.touches[0].clientX - startX;
     const dy = e.touches[0].clientY - startY;
-    // Only trigger on rightward horizontal swipe
     if (Math.abs(dx) > Math.abs(dy) && dx > 40) {
       target.style.transform = `translateX(${Math.min(dx * 0.4, 50)}px)`;
       target.style.transition = 'none';
@@ -128,13 +137,53 @@ export function enableSwipeToReply(container, onReply) {
     target.style.transition = 'transform .25s cubic-bezier(.2,.9,.4,1)';
     target.style.transform  = '';
     if (dx > 60) {
-      const msgId   = target.dataset.msgId;
+      const msgId = target.dataset.msgId;
       const bubbleEl = target.querySelector('.msg-bubble');
-      const text    = bubbleEl?.textContent?.trim() || '[media]';
-      const isSent  = target.classList.contains('sent');
-      onReply({ id: msgId, text, senderName: isSent ? 'You' : '' });
+      const selected = getSelectedTextInBubble(bubbleEl);
+      const fullText = bubbleEl?.querySelector('.msg-text')?.textContent?.trim()
+        || bubbleEl?.textContent?.trim() || '[media]';
+      const meta = getMsgMeta?.(msgId) || {};
+      onReply({
+        id: msgId,
+        text: selected || fullText,
+        senderName: meta.senderName || (target.classList.contains('sent') ? 'You' : '')
+      });
     }
     target = null;
+  });
+
+  // Desktop: reply to highlighted text via context menu on selection
+  container.addEventListener('mouseup', e => {
+    const bubbleEl = e.target.closest('.msg-bubble');
+    if (!bubbleEl) return;
+    const selected = getSelectedTextInBubble(bubbleEl);
+    if (!selected) return;
+    const group = bubbleEl.closest('.msg-group');
+    if (!group) return;
+    group.dataset.selectedReply = selected;
+  });
+}
+
+// ── Message visibility (delete for me / everyone) ──
+export function isMessageHiddenForUser(data, userId) {
+  if (!data) return true;
+  if (data.deletedForAll) return true;
+  if (data.deletedFor?.[userId]) return true;
+  return false;
+}
+
+export async function deleteMessageForMe(db, convId, msgId, userId) {
+  const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+  await updateDoc(doc(db, 'conversations', convId, 'messages', msgId), {
+    [`deletedFor.${userId}`]: serverTimestamp()
+  });
+}
+
+export async function deleteMessageForEveryone(db, convId, msgId) {
+  const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+  await updateDoc(doc(db, 'conversations', convId, 'messages', msgId), {
+    deletedForAll: true,
+    deletedAt: serverTimestamp()
   });
 }
 
