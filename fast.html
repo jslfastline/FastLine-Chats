@@ -26,7 +26,7 @@
     <script src="scripts/theme-boot.js"></script>
     <style>
       .pwa-install-fab {
-        position: fixed; bottom: 20px; right: 20px; z-index: 9998;
+        position: fixed; bottom: 20px; right: 20px; left: auto; z-index: 9998;
         background: linear-gradient(135deg, #00BFFF, #1E90FF); border: none;
         border-radius: 50px; padding: 10px 16px; color: #000; font-weight: 700;
         font-size: 0.78rem; font-family: 'Syne', sans-serif; cursor: pointer;
@@ -43,7 +43,7 @@
     </style>
   </head>
   <body class="dark-mode">
-    <!-- Top-left profile shortcut (visible when avatar is set) -->
+    <!-- Top-right profile shortcut (visible when avatar is set) -->
     <button type="button" class="profile-fab hidden" id="profileFab" title="Profile Settings" aria-label="Open profile settings">
       <img src="default-profile.png" alt="" id="profileFabImg" onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'" />
       <span class="profile-fab-ring"></span>
@@ -557,78 +557,25 @@
     <script type="importmap">
       {
         "imports": {
-          "firebase/app": "./scripts/mock-firebase-app.js",
-          "firebase/firestore": "./scripts/mock-firebase-firestore.js",
-          "firebase/storage": "./scripts/mock-firebase-storage.js"
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+          "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"
         }
       }
     </script>
 
-    <script src="scripts/firebase-config.js" type="module"></script>
     <script src="app.js" type="module"></script>
 
-    <!-- PWA Install Logic -->
-    <script>
-      (function() {
-        let deferredPrompt = null;
-        const fab = document.getElementById('installPwaBtn');
-
-        function isStandalone() {
-          return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-        }
-
-        function markInstalled() {
-          fab.classList.add('installed');
-          fab.innerHTML = '<i class="fas fa-check"></i> Installed';
-        }
-
-        function showFab() {
-          if (isStandalone()) { markInstalled(); return; }
-          fab.classList.remove('hidden');
-        }
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-          e.preventDefault();
-          deferredPrompt = e;
-          showFab();
-        });
-
-        window.addEventListener('appinstalled', () => {
-          deferredPrompt = null;
-          markInstalled();
-        });
-
-        fab.addEventListener('click', async () => {
-          if (isStandalone()) return;
-          if (!deferredPrompt) {
-            showToast('Open browser menu → "Add to Home Screen" to install');
-            return;
-          }
-          deferredPrompt.prompt();
-          const result = await deferredPrompt.userChoice;
-          deferredPrompt = null;
-          if (result.outcome === 'accepted') markInstalled();
-        });
-
-        function showToast(msg) {
-          const t = document.createElement('div');
-          t.className = 'toast-notif';
-          t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(14,14,16,.95);border:1px solid rgba(0,191,255,.3);border-radius:12px;padding:10px 20px;font-size:.85rem;color:#fff;font-family:"DM Sans",sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.5);backdrop-filter:blur(12px);white-space:nowrap;';
-          t.textContent = msg;
-          document.body.appendChild(t);
-          setTimeout(() => t.remove(), 4000);
-        }
-
-        if (isStandalone()) markInstalled();
-        else setTimeout(showFab, 1500);
-      })();
+    <script type="module">
+      import { initPwaInstallButton } from './scripts/pwa-install.js';
+      initPwaInstallButton('installPwaBtn');
     </script>
 
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker
-            .register("service-worker.js")
+            .register("./service-worker.js", { scope: "./" })
             .then((reg) => console.log("[SW] Registered", reg.scope))
             .catch((err) => console.warn("[SW] Failed", err));
         });

@@ -80,18 +80,14 @@
     <script type="importmap">
       {
         "imports": {
-          "firebase/app": "./scripts/mock-firebase-app.js",
-          "firebase/firestore": "./scripts/mock-firebase-firestore.js"
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
         }
       }
     </script>
     <script type="module">
-      import { initializeApp } from "firebase/app";
-      import { getFirestore, doc, getDoc } from "firebase/firestore";
-
-      const firebaseConfig = { apiKey: "local", authDomain: "local", projectId: "fastline-local", storageBucket: "local", messagingSenderId: "0", appId: "0" };
-      const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
+      import { db } from "./scripts/firebase-config.js";
+      import { doc, getDoc } from "firebase/firestore";
 
       const SESSION_EMAIL_KEY = "fastline_session_email";
       const SESSION_EXPIRY_KEY = "fastline_session_expiry";
@@ -137,7 +133,7 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('service-worker.js').catch(() => {});
+          navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(() => {});
         });
       }
 
@@ -146,36 +142,46 @@
       const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-      if (!isStandalone) {
-        if (isIos) installBtn.classList.add('show');
+      const hideInstall = () => {
+        installBtn.classList.remove('show');
+        installBtn.style.display = 'none';
+        localStorage.setItem('fastline_pwa_installed', '1');
+      };
+
+      if (isStandalone || localStorage.getItem('fastline_pwa_installed') === '1') {
+        hideInstall();
+      } else if (isIos) {
+        installBtn.classList.add('show');
       }
 
       window.addEventListener('beforeinstallprompt', (e) => {
         e.preventDefault();
         deferredPrompt = e;
-        if (!isStandalone) installBtn.classList.add('show');
+        if (!isStandalone && localStorage.getItem('fastline_pwa_installed') !== '1') {
+          installBtn.classList.add('show');
+        }
       });
 
       window.addEventListener('appinstalled', () => {
-        installBtn.classList.remove('show');
         deferredPrompt = null;
+        hideInstall();
       });
 
       installBtn.addEventListener('click', async () => {
         if (deferredPrompt) {
           deferredPrompt.prompt();
-          await deferredPrompt.userChoice;
+          const { outcome } = await deferredPrompt.userChoice;
           deferredPrompt = null;
-          installBtn.classList.remove('show');
+          if (outcome === 'accepted') hideInstall();
           return;
         }
 
         if (isIos) {
-          alert('On iPhone/iPad: tap Share button then "Add to Home Screen".');
+          alert('On iPhone/iPad: tap Share then "Add to Home Screen".');
           return;
         }
 
-        alert('Install option is not ready yet. Use your browser menu and choose "Install App" or "Add to Home Screen".');
+        alert('Use your browser menu → Install app / Add to Home Screen.');
       });
     </script>
   </body>

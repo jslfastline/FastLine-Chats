@@ -2,28 +2,26 @@
   "name": "FastLine Chats",
   "short_name": "FastLine",
   "description": "Modern, secure and futuristic real-time messaging platform",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0E0E10",
   "theme_color": "#00BFFF",
   "lang": "en",
-  "scope": "/",
+  "scope": "./",
   "categories": ["social", "communication"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
     {
       "name": "New Chat",
       "short_name": "Chat",
       "description": "Start a new conversation",
-      "url": "/fast.html?action=new-chat",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+      "url": "./fast.html?action=new-chat",
+      "icons": [{ "src": "./icon-192.png", "sizes": "192x192" }]
     }
   ],
-  "screenshots": [],
-  "related_applications": [],
   "prefer_related_applications": false
 }

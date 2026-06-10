@@ -187,19 +187,15 @@
     <script type="importmap">
       {
         "imports": {
-          "firebase/app": "./scripts/mock-firebase-app.js",
-          "firebase/firestore": "./scripts/mock-firebase-firestore.js"
+          "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
         }
       }
     </script>
 
     <script type="module">
-      import { initializeApp } from "firebase/app";
-      import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-
-      const firebaseConfig = { apiKey: "local", authDomain: "local", projectId: "fastline-local", storageBucket: "local", messagingSenderId: "0", appId: "0" };
-      const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
+      import { db } from "./scripts/firebase-config.js";
+      import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
       const SESSION_EMAIL_KEY = "fastline_session_email";
       const SESSION_EXPIRY_KEY = "fastline_session_expiry";

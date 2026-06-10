@@ -1,82 +1,95 @@
-const CACHE_NAME = 'fastline-v5';
+const CACHE_NAME = 'fastline-v6';
+
+function asset(path) {
+  return new URL(path, self.location).href;
+}
+
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/fast.html',
-  '/login.html',
-  '/profile.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/default-profile.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/scripts/firebase-config.js',
-  '/scripts/mock-firebase-app.js',
-  '/scripts/mock-firebase-firestore.js',
-  '/scripts/mock-firebase-storage.js',
-  '/components/chat.js',
-  '/components/profile.js',
-  '/components/video-call.js',
-  '/pwa.js',
-  '/app-install.js',
-  'https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css'
+  './',
+  './index.html',
+  './fast.html',
+  './login.html',
+  './profile.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './default-profile.png',
+  './icon-192.png',
+  './icon-512.png',
+  './scripts/firebase-config.js',
+  './scripts/theme-boot.js',
+  './scripts/pwa-install.js',
+  './components/chat.js',
+  './components/profile.js',
+  './components/video-call.js',
+  './components/image-cropper.js'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(STATIC_ASSETS.filter(url => !url.startsWith('https://fonts')));
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
+      .catch(err => console.warn('[SW] precache partial fail', err))
   );
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', event => {
   const { request } = event;
-  const url = new URL(request.url);
-
   if (request.method !== 'GET') return;
-  if (url.hostname.includes('firestore') || url.hostname.includes('googleapis') || url.hostname.includes('firebasestorage')) return;
+
+  const url = new URL(request.url);
+  if (
+    url.hostname.includes('firestore.googleapis.com') ||
+    url.hostname.includes('firebasestorage.googleapis.com') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('gstatic.com') ||
+    url.hostname.includes('emailjs.com')
+  ) {
+    return;
+  }
 
   event.respondWith(
     fetch(request)
       .then(response => {
-        if (response && response.status === 200 && request.method === 'GET') {
+        if (response && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(request).then(cached => cached || caches.match('/index.html')))
+      .catch(() =>
+        caches.match(request).then(cached =>
+          cached || caches.match(asset('./index.html'))
+        )
+      )
   );
 });
 
 self.addEventListener('push', event => {
   const data = event.data?.json() || {};
-  const title   = data.title   || 'FastLine Chats';
-  const body    = data.body    || 'You have a new message';
-  const icon    = data.icon    || '/icon-192.png';
-  const badge   = data.badge   || '/icon-192.png';
-  const tag     = data.tag     || 'fastline-msg';
-  const url     = data.url     || '/fast.html';
-
   event.waitUntil(
-    self.registration.showNotification(title, { body, icon, badge, tag, data: { url } })
+    self.registration.showNotification(data.title || 'FastLine Chats', {
+      body: data.body || 'You have a new message',
+      icon: asset('./icon-192.png'),
+      badge: asset('./icon-192.png'),
+      tag: data.tag || 'fastline-msg',
+      data: { url: data.url || asset('./fast.html') }
+    })
   );
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const url = event.notification.data?.url || '/fast.html';
+  const url = event.notification.data?.url || asset('./fast.html');
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       const match = list.find(c => c.url.includes('fast.html'));
