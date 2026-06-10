@@ -231,7 +231,41 @@ body { background: var(--bg); color: var(--text); transition: background .3s, co
 /* ═══════════════════════════════════
    MAIN PANEL
 ═══════════════════════════════════ */
-.main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; background: var(--bg); }
+.main-panel > *:not(.chat-watermark-layer) { position: relative; z-index: 1; }
+
+/* Decorative watermark behind chat */
+.chat-watermark-layer {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='140' viewBox='0 0 320 140'%3E%3Ctext x='10' y='70' fill='%2300BFFF' font-family='Syne,sans-serif' font-size='22' font-weight='800' opacity='0.35' transform='rotate(-24 160 70)'%3EFastLine Chats%3C/text%3E%3C/svg%3E");
+  background-size: 320px 140px;
+  opacity: 0.06;
+}
+body.light-mode .chat-watermark-layer { opacity: 0.04; }
+
+/* Top-left profile shortcut */
+.profile-fab {
+  position: fixed; top: 14px; left: 14px; z-index: 190;
+  width: 48px; height: 48px; padding: 0; border: none; border-radius: 50%;
+  background: transparent; cursor: pointer; transition: transform .2s, box-shadow .2s;
+}
+@media (min-width: 769px) {
+  .profile-fab { left: calc(var(--sidebar-w) + 14px); }
+}
+.profile-fab img {
+  width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+  border: 2px solid var(--accent); box-shadow: 0 0 16px rgba(0,191,255,.35);
+}
+.profile-fab-ring {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 2px solid rgba(0,191,255,.4); animation: fabPulse 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes fabPulse {
+  0%, 100% { opacity: .5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+.profile-fab:hover { transform: scale(1.08); }
 
 /* ── Welcome Screen ── */
 .welcome-screen {
@@ -662,6 +696,67 @@ input:checked + .toggle-slider:before { transform: translateX(20px); background:
   background: rgba(0,191,255,.12); border-color: var(--accent); color: var(--accent);
 }
 .appearance-btn:hover:not(.active) { background: var(--surface-3); }
+
+/* Status audience */
+.status-audience-toggle { display: flex; gap: 8px; }
+.audience-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); font-family: inherit;
+  font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .2s;
+}
+.audience-btn.active { background: rgba(0,191,255,.12); border-color: var(--accent); color: var(--accent); }
+.status-viewer-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .5rem; min-height: 24px; }
+
+/* Futuristic profile modal */
+.modal-profile-future {
+  max-width: 440px; overflow: hidden; border: 1px solid rgba(0,191,255,.25);
+  background: linear-gradient(160deg, var(--surface) 0%, var(--surface-2) 100%) !important;
+  box-shadow: 0 24px 80px rgba(0,0,0,.55), 0 0 60px rgba(0,191,255,.08);
+}
+.profile-modal-glow {
+  position: absolute; top: -40%; left: -20%; width: 140%; height: 80%;
+  background: radial-gradient(ellipse, rgba(0,191,255,.15), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.modal-profile-future .modal-header,
+.modal-profile-future .modal-body { position: relative; z-index: 1; }
+.profile-modal-header { align-items: flex-start !important; }
+.profile-hero {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  margin-bottom: 1.4rem; padding-bottom: 1.2rem;
+  border-bottom: 1px solid var(--border);
+}
+.profile-avatar-orbit { position: relative; width: 120px; height: 120px; margin-bottom: 1rem; }
+.orbit-ring {
+  position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgba(0,191,255,.35);
+  animation: orbitSpin 12s linear infinite;
+}
+.orbit-ring-2 { inset: -8px; animation-direction: reverse; animation-duration: 18s; opacity: .6; }
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+.profile-avatar-future { width: 96px; height: 96px; margin: 12px auto 0; }
+.profile-avatar-future img { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent); }
+.profile-handle { font-family: 'Syne', sans-serif; font-size: 1.25rem; font-weight: 800; color: var(--text); }
+.profile-email-future { font-size: .78rem; color: var(--text-muted); margin: .25rem 0 .6rem; }
+.profile-badge {
+  display: inline-flex; align-items: center; gap: 6px; font-size: .72rem;
+  padding: 4px 12px; border-radius: 20px; background: rgba(0,191,255,.1);
+  border: 1px solid rgba(0,191,255,.25); color: var(--accent);
+}
+.profile-field-card {
+  margin-bottom: 1rem; padding: .9rem 1rem; border-radius: 14px;
+  background: rgba(0,191,255,.04); border: 1px solid var(--border);
+}
+.profile-field-card label {
+  display: flex; align-items: center; gap: 6px; font-size: .72rem;
+  text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted);
+  margin-bottom: .5rem; font-weight: 600;
+}
+.input-future { background: var(--input-bg) !important; border-radius: 12px !important; }
+.btn-future {
+  margin-top: .5rem; border-radius: 14px !important;
+  box-shadow: 0 0 24px rgba(0,191,255,.25);
+}
 
 /* ── Video Call Modal ── */
 .video-call-modal { max-width: 620px; background: #000 !important; }

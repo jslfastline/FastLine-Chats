@@ -84,6 +84,8 @@ let contextTarget = null;      // Message for context menu
 let messageCache = new Map();  // msgId -> data for swipe reply meta
 let lastMsgSnapshotKey = '';   // Detect new incoming messages for notifications
 let groupSelectedMembers = []; // For group creation
+let statusSelectedViewers = []; // For status audience picker
+let statusAudience = 'all_contacts';
 let mediaRecorder = null;
 let audioChunks = [];
 let recInterval = null;
@@ -147,6 +149,38 @@ function renderSidebarUser() {
   $('profileDisplayName').value = currentUser.displayName;
   $('profileStatusMsg').value = currentUser.status;
   $('profileEmail').textContent = currentUser.email;
+  $('profileHeroName') && ($('profileHeroName').textContent = currentUser.displayName);
+
+  const hasAvatar = !!(currentUser.avatar || '').trim();
+  const fab = $('profileFab');
+  const fabImg = $('profileFabImg');
+  if (fab && fabImg) {
+    fabImg.src = currentUser.avatar;
+    fab.classList.toggle('hidden', !hasAvatar);
+  }
+}
+
+async function getMyContactIds() {
+  const snap = await getDocs(query(
+    collection(db, 'conversations'),
+    where('members', 'array-contains', currentUser.id)
+  ));
+  const ids = new Set();
+  snap.docs.forEach(d => {
+    const peerId = (d.data().members || []).find(m => m !== currentUser.id);
+    if (peerId && !isUserHidden(peerId)) ids.add(peerId);
+  });
+  return [...ids];
+}
+
+function canViewStatus(statusData, viewerId) {
+  if (!statusData) return false;
+  if (statusData.userId === viewerId) return true;
+  const audience = statusData.audience || 'all_contacts';
+  if (audience === 'selected') {
+    return (statusData.viewerIds || []).includes(viewerId);
+  }
+  return true;
 }
 
 function isRegisteredUser(user) {
@@ -1115,10 +1149,14 @@ function listenStatusUpdates() {
     const now = Date.now();
     const items = [];
 
+    const myContacts = await getMyContactIds();
+
     for (const d of snap.docs) {
       const data = d.data();
       if (data.expiresAt && data.expiresAt < now) continue;
       if (isUserHidden(data.userId)) continue;
+      if (!canViewStatus(data, currentUser.id)) continue;
+      if (data.userId !== currentUser.id && !myContacts.includes(data.userId)) continue;
 
       const userSnap = await getDoc(doc(db, 'users', data.userId));
       if (!userSnap.exists() || !isRegisteredUser(userSnap.data())) continue;
@@ -1163,6 +1201,11 @@ async function postStatus() {
   const imageFile = $('statusImageInput').files[0];
   if (!text && !imageFile) { toast('Add text or a photo', 'var(--error)'); return; }
 
+  if (statusAudience === 'selected' && statusSelectedViewers.length === 0) {
+    toast('Select at least one person to share with', 'var(--error)');
+    return;
+  }
+
   let imageUrl = null;
   if (imageFile) {
     const path = `status/${currentUser.id}/${Date.now()}_${imageFile.name}`;
@@ -1175,14 +1218,90 @@ async function postStatus() {
     userId: currentUser.id,
     text: text || '',
     imageUrl,
+    audience: statusAudience,
+    viewerIds: statusAudience === 'selected' ? statusSelectedViewers.map(v => v.id) : [],
     createdAt: serverTimestamp(),
     expiresAt: Date.now() + 24 * 60 * 60 * 1000
   });
 
+  const viewerCount = statusSelectedViewers.length;
+  const audience = statusAudience;
+
   $('statusTextInput').value = '';
   $('statusImageInput').value = '';
+  statusSelectedViewers = [];
+  renderStatusViewerChips();
   $('addStatusModal').classList.add('hidden');
-  toast('Status posted!');
+  toast(audience === 'all_contacts' ? 'Status shared with all contacts!' : `Status shared with ${viewerCount} people!`);
+}
+
+function renderStatusViewerChips() {
+  const chips = $('statusViewerChips');
+  if (!chips) return;
+  chips.innerHTML = statusSelectedViewers.map(v => `
+    <span class="member-chip">${escapeHtml(v.username)}<button type="button" data-id="${v.id}">&times;</button></span>
+  `).join('');
+  chips.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusSelectedViewers = statusSelectedViewers.filter(v => v.id !== btn.dataset.id);
+      renderStatusViewerChips();
+      loadStatusViewerSearch($('statusViewerSearch')?.value?.trim() || '');
+    });
+  });
+}
+
+async function loadStatusViewerSearch(filter = '') {
+  const results = $('statusViewerResults');
+  if (!results) return;
+  const contactIds = await getMyContactIds();
+  if (contactIds.length === 0) {
+    results.innerHTML = '<div class="search-hint">No contacts yet. Start a chat first.</div>';
+    return;
+  }
+
+  const users = [];
+  for (const id of contactIds) {
+    const snap = await getDoc(doc(db, 'users', id));
+    if (snap.exists() && isRegisteredUser(snap.data())) {
+      users.push({ id, ...snap.data() });
+    }
+  }
+
+  let filtered = users.filter(u => !statusSelectedViewers.some(s => s.id === u.id));
+  if (filter) filtered = filtered.filter(u => matchesUserSearch(u, filter));
+
+  if (filtered.length === 0) {
+    results.innerHTML = '<div class="search-hint">No contacts match</div>';
+    return;
+  }
+
+  results.innerHTML = '';
+  filtered.forEach(u => {
+    const el = document.createElement('div');
+    el.className = 'user-result-item';
+    el.innerHTML = `
+      <img src="${u.avatar || 'default-profile.png'}" alt="" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(u.username)}&background=00BFFF&color=000'" />
+      <div class="user-result-info"><div class="result-name">${escapeHtml(u.username)}</div></div>
+      <button class="start-chat-btn"><i class="fas fa-plus"></i> Add</button>
+    `;
+    el.querySelector('button').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!statusSelectedViewers.some(s => s.id === u.id)) {
+        statusSelectedViewers.push({ id: u.id, username: u.username });
+        renderStatusViewerChips();
+        loadStatusViewerSearch(filter);
+      }
+    });
+    results.appendChild(el);
+  });
+}
+
+function setStatusAudience(mode) {
+  statusAudience = mode;
+  $('statusAudienceAll')?.classList.toggle('active', mode === 'all_contacts');
+  $('statusAudienceSelected')?.classList.toggle('active', mode === 'selected');
+  $('statusViewerPicker')?.classList.toggle('hidden', mode !== 'selected');
+  if (mode === 'selected') loadStatusViewerSearch();
 }
 
 // ════════════════════════════════════════════════════
@@ -1668,10 +1787,22 @@ function setupUI() {
   $('addStatusBtn').addEventListener('click', () => {
     $('statusTextInput').value = '';
     $('statusImageInput').value = '';
+    statusSelectedViewers = [];
+    statusAudience = 'all_contacts';
+    setStatusAudience('all_contacts');
+    renderStatusViewerChips();
     $('addStatusModal').classList.remove('hidden');
   });
 
+  $('statusAudienceAll')?.addEventListener('click', () => setStatusAudience('all_contacts'));
+  $('statusAudienceSelected')?.addEventListener('click', () => setStatusAudience('selected'));
+  $('statusViewerSearch')?.addEventListener('input', debounce(() => {
+    loadStatusViewerSearch($('statusViewerSearch').value.trim());
+  }, 300));
+
   $('confirmAddStatusBtn').addEventListener('click', () => postStatus().catch(err => toast(err.message, 'var(--error)')));
+
+  $('profileFab')?.addEventListener('click', () => $('profileModal').classList.remove('hidden'));
   $('confirmCreateGroupBtn').addEventListener('click', () => createGroup().catch(err => toast(err.message, 'var(--error)')));
   $('groupMemberSearch')?.addEventListener('input', debounce(() => {
     loadGroupMemberSearch($('groupMemberSearch').value.trim());

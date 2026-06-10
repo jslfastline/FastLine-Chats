@@ -23,6 +23,7 @@
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
     />
     <link rel="stylesheet" href="style.css" />
+    <script src="scripts/theme-boot.js"></script>
     <style>
       .pwa-install-fab {
         position: fixed; bottom: 20px; right: 20px; z-index: 9998;
@@ -42,6 +43,12 @@
     </style>
   </head>
   <body class="dark-mode">
+    <!-- Top-left profile shortcut (visible when avatar is set) -->
+    <button type="button" class="profile-fab hidden" id="profileFab" title="Profile Settings" aria-label="Open profile settings">
+      <img src="default-profile.png" alt="" id="profileFabImg" onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'" />
+      <span class="profile-fab-ring"></span>
+    </button>
+
     <div id="app">
       <aside id="sidebar" class="sidebar">
         <div class="sidebar-header">
@@ -115,6 +122,7 @@
       </aside>
 
       <main id="mainPanel" class="main-panel">
+        <div class="chat-watermark-layer" aria-hidden="true"></div>
         <div id="welcomeScreen" class="welcome-screen">
           <div class="welcome-glow"></div>
           <div class="welcome-content">
@@ -294,53 +302,53 @@
       </div>
     </div>
 
-    <!-- Profile Modal -->
+    <!-- Profile Modal — Futuristic -->
     <div class="modal-overlay hidden" id="profileModal">
-      <div class="modal">
-        <div class="modal-header">
-          <h2><i class="fas fa-user-circle"></i> My Profile</h2>
+      <div class="modal modal-profile-future">
+        <div class="profile-modal-glow"></div>
+        <div class="modal-header profile-modal-header">
+          <div>
+            <h2><i class="fas fa-user-astronaut"></i> Identity Hub</h2>
+            <span class="modal-subtitle">Customize your FastLine presence</span>
+          </div>
           <button class="icon-btn modal-close" data-modal="profileModal">
             <i class="fas fa-times"></i>
           </button>
         </div>
-        <div class="modal-body">
-          <div class="profile-avatar-section">
-            <div class="profile-avatar-wrap">
-              <img
-                src="default-profile.png"
-                alt="Profile"
-                id="profileAvatarImg"
-                onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'"
-              />
-              <button class="avatar-upload-btn" id="avatarUploadBtn">
-                <i class="fas fa-camera"></i>
-              </button>
-              <input type="file" id="avatarInput" accept="image/*" hidden />
+        <div class="modal-body profile-modal-body">
+          <div class="profile-hero">
+            <div class="profile-avatar-orbit">
+              <div class="orbit-ring orbit-ring-1"></div>
+              <div class="orbit-ring orbit-ring-2"></div>
+              <div class="profile-avatar-wrap profile-avatar-future">
+                <img
+                  src="default-profile.png"
+                  alt="Profile"
+                  id="profileAvatarImg"
+                  onerror="this.src='https://ui-avatars.com/api/?name=U&background=00BFFF&color=fff'"
+                />
+                <button class="avatar-upload-btn" id="avatarUploadBtn" title="Change photo">
+                  <i class="fas fa-camera"></i>
+                </button>
+                <input type="file" id="avatarInput" accept="image/*" hidden />
+              </div>
             </div>
-            <div class="profile-email" id="profileEmail">—</div>
+            <div class="profile-hero-meta">
+              <div class="profile-handle" id="profileHeroName">—</div>
+              <div class="profile-email-future" id="profileEmail">—</div>
+              <div class="profile-badge"><i class="fas fa-shield-alt"></i> Verified Member</div>
+            </div>
           </div>
-          <div class="form-group">
-            <label>Display Name</label>
-            <input
-              type="text"
-              id="profileDisplayName"
-              class="input-field-modal"
-              placeholder="Your name"
-              maxlength="40"
-            />
+          <div class="profile-field-card">
+            <label><i class="fas fa-signature"></i> Display Name</label>
+            <input type="text" id="profileDisplayName" class="input-field-modal input-future" placeholder="Your public name" maxlength="40" />
           </div>
-          <div class="form-group">
-            <label>Status</label>
-            <input
-              type="text"
-              id="profileStatusMsg"
-              class="input-field-modal"
-              placeholder="Hey there! I'm using FastLine."
-              maxlength="80"
-            />
+          <div class="profile-field-card">
+            <label><i class="fas fa-comment-dots"></i> Status Message</label>
+            <input type="text" id="profileStatusMsg" class="input-field-modal input-future" placeholder="Hey there! I'm using FastLine." maxlength="80" />
           </div>
-          <button class="btn-primary full-width" id="saveProfileBtn">
-            <i class="fas fa-save"></i> Save Profile
+          <button class="btn-primary full-width btn-future" id="saveProfileBtn">
+            <i class="fas fa-bolt"></i> Save &amp; Sync Profile
           </button>
         </div>
       </div>
@@ -490,6 +498,23 @@
           <div class="form-group">
             <label>Or add a photo</label>
             <input type="file" id="statusImageInput" accept="image/*" class="input-field-modal" style="padding:8px;" />
+          </div>
+          <div class="form-group">
+            <label>Who can see this?</label>
+            <div class="status-audience-toggle">
+              <button type="button" class="audience-btn active" data-audience="all_contacts" id="statusAudienceAll">
+                <i class="fas fa-users"></i> All Contacts
+              </button>
+              <button type="button" class="audience-btn" data-audience="selected" id="statusAudienceSelected">
+                <i class="fas fa-user-check"></i> Selected People
+              </button>
+            </div>
+          </div>
+          <div class="form-group hidden" id="statusViewerPicker">
+            <label>Select viewers</label>
+            <input type="text" id="statusViewerSearch" class="input-field-modal" placeholder="Search contacts…" />
+            <div class="status-viewer-chips" id="statusViewerChips"></div>
+            <div class="user-list-scroll" id="statusViewerResults" style="max-height: 28vh; overflow-y: auto; margin-top: .6rem;"></div>
           </div>
           <button class="btn-primary full-width" id="confirmAddStatusBtn"><i class="fas fa-paper-plane"></i> Post Status</button>
         </div>

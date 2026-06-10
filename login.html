@@ -7,6 +7,7 @@
     <link rel="manifest" href="manifest.json" />
     <title>FastLine Chats | Sign In</title>
     <link rel="shortcut icon" href="icon-192.png" type="image/png" />
+    <script src="scripts/theme-boot.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
@@ -55,9 +56,36 @@
       .form-footer a { color: var(--accent); font-weight: 600; cursor: pointer; }
       .toast { position: fixed; top: 20px; right: 20px; z-index: 999; background: rgba(10,10,14,0.95); border-left: 4px solid var(--accent); color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 0.85rem; backdrop-filter: blur(10px); animation: toastIn 0.3s ease; }
       @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+      .theme-fab-auth {
+        position: fixed; top: 16px; right: 16px; z-index: 20;
+        width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border);
+        background: var(--surface); color: var(--accent); cursor: pointer; font-size: 1rem;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 16px rgba(0,0,0,.3);
+      }
+      .signup-wizard-steps { display: flex; gap: 8px; justify-content: center; margin-bottom: 1.4rem; }
+      .wiz-step {
+        width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border);
+        display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700;
+        color: var(--text-muted); transition: all .25s;
+      }
+      .wiz-step.active { border-color: var(--accent); color: var(--accent); background: rgba(0,191,255,.12); box-shadow: 0 0 12px rgba(0,191,255,.25); }
+      .wiz-step.done { border-color: var(--success); color: var(--success); background: rgba(0,230,118,.08); }
+      .signup-step-panel { display: none; animation: fadeStep .35s ease; }
+      .signup-step-panel.active { display: block; }
+      @keyframes fadeStep { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      .step-title { font-size: .95rem; font-weight: 700; color: var(--text); margin-bottom: .35rem; text-align: center; }
+      .step-desc { font-size: .78rem; color: var(--text-muted); text-align: center; margin-bottom: 1.2rem; line-height: 1.4; }
+      .otp-sent-banner {
+        background: rgba(0,230,118,.08); border: 1px solid rgba(0,230,118,.3);
+        border-radius: 12px; padding: 10px 12px; font-size: .8rem; color: var(--success);
+        text-align: center; margin-bottom: 1rem;
+      }
+      .neon-btn.outline { background: transparent; border: 1.5px solid var(--border); color: var(--accent); margin-top: .6rem; }
     </style>
   </head>
   <body>
+    <button type="button" class="theme-fab-auth" id="authThemeToggle" title="Toggle light/dark mode"><i class="fas fa-moon"></i></button>
     <div class="bg-layer"></div>
     <div class="grid-lines"></div>
     <div id="particlesContainer"></div>
@@ -91,32 +119,63 @@
           <div class="form-footer">Don't have an account? <a id="gotoSignup">Sign Up</a></div>
         </div>
 
-        <!-- SIGNUP -->
+        <!-- SIGNUP — 3-step wizard -->
         <div id="page-signup" class="page">
-          <div class="input-group">
-            <i class="fas fa-user input-icon"></i>
-            <input type="text" id="signupUsername" class="input-field" placeholder="Username" autocomplete="username" />
+          <div class="signup-wizard-steps">
+            <div class="wiz-step active" id="wizStep1" data-step="1">1</div>
+            <div class="wiz-step" id="wizStep2" data-step="2">2</div>
+            <div class="wiz-step" id="wizStep3" data-step="3">3</div>
           </div>
-          <div class="input-group">
-            <i class="fas fa-align-left input-icon"></i>
-            <input type="text" id="signupDescription" class="input-field" placeholder="Descriptions (optional, can be set on Profile tab)" maxlength="80" />
+
+          <!-- Step 1: Credentials -->
+          <div id="signup-panel-1" class="signup-step-panel active">
+            <div class="step-title">Create your identity</div>
+            <div class="step-desc">Choose a username and secure password first</div>
+            <div class="input-group">
+              <i class="fas fa-user input-icon"></i>
+              <input type="text" id="signupUsername" class="input-field" placeholder="Username" autocomplete="username" />
+            </div>
+            <div class="input-group">
+              <i class="fas fa-align-left input-icon"></i>
+              <input type="text" id="signupDescription" class="input-field" placeholder="Bio (optional)" maxlength="80" />
+            </div>
+            <div class="input-group">
+              <i class="fas fa-lock input-icon"></i>
+              <input type="password" id="signupPass" class="input-field" placeholder="Password (min 6 characters)" autocomplete="new-password" />
+            </div>
+            <button class="neon-btn" id="signupNext1" type="button"><i class="fas fa-arrow-right"></i> Continue</button>
           </div>
-          <div class="input-group">
-            <i class="fas fa-envelope input-icon"></i>
-            <input type="email" id="signupEmail" class="input-field" placeholder="Email Address" autocomplete="email" />
+
+          <!-- Step 2: Email + request OTP -->
+          <div id="signup-panel-2" class="signup-step-panel">
+            <div class="step-title">Verify your email</div>
+            <div class="step-desc">Enter your email, then request a one-time code</div>
+            <div class="input-group">
+              <i class="fas fa-envelope input-icon"></i>
+              <input type="email" id="signupEmail" class="input-field" placeholder="Email address" autocomplete="email" />
+            </div>
+            <button class="neon-btn" id="sendOtpBtn" type="button" disabled>
+              <i class="fas fa-paper-plane"></i> Ask For OTP for Verification
+            </button>
+            <button class="neon-btn outline" id="signupBack2" type="button"><i class="fas fa-arrow-left"></i> Back</button>
           </div>
-          <div class="otp-row">
+
+          <!-- Step 3: Enter OTP + create account -->
+          <div id="signup-panel-3" class="signup-step-panel">
+            <div class="step-title">Enter verification code</div>
+            <div class="step-desc">Check your inbox — we sent a 6-digit OTP</div>
+            <div class="otp-sent-banner hidden" id="otpSentBanner">
+              <i class="fas fa-envelope-open-text"></i> OTP sent to <strong id="otpSentEmail">—</strong>
+            </div>
             <div class="input-group">
               <i class="fas fa-key input-icon"></i>
-              <input type="text" id="signupOtp" class="input-field" placeholder="Enter OTP code" maxlength="6" inputmode="numeric" />
+              <input type="text" id="signupOtp" class="input-field" placeholder="Enter 6-digit OTP" maxlength="6" inputmode="numeric" />
             </div>
-            <button class="otp-send-btn" id="sendOtpBtn" type="button">Receive OTP</button>
+            <button class="neon-btn" id="signupBtn" type="button"><i class="fas fa-user-plus"></i> Create Account</button>
+            <button class="neon-btn outline" id="resendOtpBtn" type="button"><i class="fas fa-redo"></i> Resend OTP</button>
+            <button class="neon-btn outline" id="signupBack3" type="button"><i class="fas fa-arrow-left"></i> Change Email</button>
           </div>
-          <div class="input-group">
-            <i class="fas fa-lock input-icon"></i>
-            <input type="password" id="signupPass" class="input-field" placeholder="Password (min 6 chars)" autocomplete="new-password" />
-          </div>
-          <button class="neon-btn" id="signupBtn"><i class="fas fa-user-plus"></i> Create Account</button>
+
           <div class="msg" id="signupMsg"></div>
           <div class="form-footer">Already have an account? <a id="gotoLogin">Sign In</a></div>
         </div>
@@ -147,6 +206,7 @@
       const SESSION_DURATION = 30 * 24 * 60 * 60 * 1000;
       const OTP_KEY = "fastline_signup_otp";
       const SIGNUP_DRAFT_KEY = "fastline_signup_draft";
+      const SIGNUP_STEP_KEY = "fastline_signup_step";
       const OTP_EXPIRY_MS = 5 * 60 * 1000;
       const EMAILJS_SERVICE_ID = "service_zxs16vo";
       const EMAILJS_TEMPLATE_ID = "template_nyxdbw7";
@@ -197,7 +257,9 @@
           username: document.getElementById('signupUsername').value.trim(),
           description: document.getElementById('signupDescription').value.trim(),
           email: document.getElementById('signupEmail').value.trim(),
-          otp: document.getElementById('signupOtp').value.trim()
+          otp: document.getElementById('signupOtp').value.trim(),
+          pass: document.getElementById('signupPass').value,
+          step: getSignupStep()
         };
         localStorage.setItem(SIGNUP_DRAFT_KEY, JSON.stringify(draft));
       };
@@ -211,12 +273,55 @@
           document.getElementById('signupDescription').value = draft.description || '';
           document.getElementById('signupEmail').value = draft.email || '';
           document.getElementById('signupOtp').value = draft.otp || '';
+          if (draft.pass) document.getElementById('signupPass').value = draft.pass;
+          if (draft.step) setSignupStep(draft.step, false);
         } catch {
           // Ignore invalid stored draft
         }
       };
 
-      const clearSignupDraft = () => localStorage.removeItem(SIGNUP_DRAFT_KEY);
+      const clearSignupDraft = () => {
+        localStorage.removeItem(SIGNUP_DRAFT_KEY);
+        localStorage.removeItem(SIGNUP_STEP_KEY);
+      };
+
+      const getSignupStep = () => parseInt(localStorage.getItem(SIGNUP_STEP_KEY) || '1', 10);
+
+      const setSignupStep = (step, persist = true) => {
+        step = Math.max(1, Math.min(3, step));
+        if (persist) localStorage.setItem(SIGNUP_STEP_KEY, String(step));
+        [1, 2, 3].forEach(n => {
+          document.getElementById('signup-panel-' + n)?.classList.toggle('active', n === step);
+          const wiz = document.getElementById('wizStep' + n);
+          if (wiz) {
+            wiz.classList.toggle('active', n === step);
+            wiz.classList.toggle('done', n < step);
+          }
+        });
+        if (step === 3) {
+          const email = document.getElementById('signupEmail').value.trim();
+          const banner = document.getElementById('otpSentBanner');
+          if (email && banner) {
+            banner.classList.remove('hidden');
+            document.getElementById('otpSentEmail').textContent = email;
+          }
+        }
+        updateOtpButtonState();
+        saveSignupDraft();
+      };
+
+      const updateOtpButtonState = () => {
+        const email = document.getElementById('signupEmail').value.trim();
+        const btn = document.getElementById('sendOtpBtn');
+        const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        btn.disabled = !valid;
+      };
+
+      const credentialsValid = () => {
+        const username = document.getElementById('signupUsername').value.trim();
+        const pass = document.getElementById('signupPass').value;
+        return username.length >= 2 && pass.length >= 6;
+      };
 
       function switchTab(tabName) {
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
@@ -340,8 +445,7 @@
         }
       });
 
-      // SIGNUP
-      document.getElementById('sendOtpBtn').addEventListener('click', async () => {
+      async function requestOtp() {
         const email = document.getElementById('signupEmail').value.trim();
         const msg = document.getElementById('signupMsg');
         const sendOtpBtn = document.getElementById('sendOtpBtn');
@@ -360,18 +464,38 @@
 
           const code = String(Math.floor(100000 + Math.random() * 900000));
           sendOtpBtn.disabled = true;
-          sendOtpBtn.textContent = 'Sending...';
+          sendOtpBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending…';
           await sendOtpEmail(email, code);
           saveOtp(email, code);
+          setSignupStep(3);
           switchTab('signup');
-          setMsg(msg, 'OTP sent to your email. Enter it to continue.', 'success');
+          setMsg(msg, 'OTP sent! Check your email and enter the code below.', 'success');
         } catch (err) {
           setMsg(msg, 'Failed to send OTP: ' + err.message, 'error');
         } finally {
-          sendOtpBtn.disabled = false;
-          sendOtpBtn.textContent = 'Receive OTP';
+          updateOtpButtonState();
+          sendOtpBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Ask For OTP for Verification';
         }
+      }
+
+      // SIGNUP wizard navigation
+      document.getElementById('signupNext1').addEventListener('click', () => {
+        const msg = document.getElementById('signupMsg');
+        if (!credentialsValid()) {
+          setMsg(msg, 'Username (2+ chars) and password (6+ chars) are required.', 'error');
+          if (!document.getElementById('signupUsername').value.trim()) shake(document.getElementById('signupUsername'));
+          else shake(document.getElementById('signupPass'));
+          return;
+        }
+        setMsg(msg, '');
+        setSignupStep(2);
       });
+
+      document.getElementById('signupBack2').addEventListener('click', () => { setSignupStep(1); });
+      document.getElementById('signupBack3').addEventListener('click', () => { setSignupStep(2); });
+
+      document.getElementById('sendOtpBtn').addEventListener('click', requestOtp);
+      document.getElementById('resendOtpBtn').addEventListener('click', requestOtp);
 
       document.getElementById('signupBtn').addEventListener('click', async () => {
         const username = document.getElementById('signupUsername').value.trim();
@@ -382,7 +506,7 @@
         const msg = document.getElementById('signupMsg');
         setMsg(msg, '');
 
-        if (!email || !pass || !otp) { setMsg(msg, 'Please fill in all fields.', 'error'); return; }
+        if (!username || !email || !pass || !otp) { setMsg(msg, 'Please complete all signup steps.', 'error'); return; }
         if (pass.length < 6) { setMsg(msg, 'Password must be at least 6 characters.', 'error'); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg(msg, 'Enter a valid email address.', 'error'); shake(document.getElementById('signupEmail')); return; }
         if (!otp || !verifyOtp(email, otp)) { setMsg(msg, 'Invalid or expired OTP code. Request a new OTP.', 'error'); return; }
@@ -407,6 +531,7 @@
 
           setMsg(msg, 'Account created!', 'success');
           localStorage.removeItem(OTP_KEY);
+          localStorage.removeItem(SIGNUP_STEP_KEY);
           clearSignupDraft();
           saveSession(email);
           toast('Welcome to FastLine Chats!');
@@ -416,40 +541,68 @@
         }
       });
 
-      // Persist signup data between refresh/tab close
-      ['signupUsername', 'signupDescription', 'signupEmail', 'signupOtp'].forEach(id => {
-        document.getElementById(id).addEventListener('input', saveSignupDraft);
+      // Persist signup data between refresh/tab close / returning from email app
+      ['signupUsername', 'signupDescription', 'signupEmail', 'signupOtp', 'signupPass'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => {
+          saveSignupDraft();
+          if (id === 'signupEmail') updateOtpButtonState();
+        });
       });
+
+      document.getElementById('signupEmail').addEventListener('input', updateOtpButtonState);
 
       loadSignupDraft();
       const savedTab = localStorage.getItem('fastline_active_auth_tab') || 'login';
       switchTab(savedTab);
 
-      // If OTP already requested and still valid, keep user on signup page
+      // Resume OTP step when user returns from email app
       try {
         const otpRaw = localStorage.getItem(OTP_KEY);
         if (otpRaw) {
           const otpData = JSON.parse(otpRaw);
           if (otpData?.expiresAt && Date.now() < otpData.expiresAt) {
             switchTab('signup');
+            if (!document.getElementById('signupEmail').value.trim() && otpData.email) {
+              document.getElementById('signupEmail').value = otpData.email;
+            }
+            setSignupStep(3);
             const msg = document.getElementById('signupMsg');
-            setMsg(msg, 'OTP was already sent. Enter it to continue registration.', 'success');
+            setMsg(msg, 'Welcome back! Enter the OTP from your email to finish signup.', 'success');
           } else {
             localStorage.removeItem(OTP_KEY);
           }
+        } else if (getSignupStep() > 1) {
+          switchTab('signup');
+          setSignupStep(getSignupStep(), false);
         }
       } catch {
         localStorage.removeItem(OTP_KEY);
       }
 
+      updateOtpButtonState();
+
+      // Global theme toggle
+      const authThemeBtn = document.getElementById('authThemeToggle');
+      const syncAuthThemeIcon = () => {
+        const isLight = localStorage.getItem('fastline_theme') === 'light';
+        authThemeBtn.innerHTML = isLight ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+      };
+      syncAuthThemeIcon();
+      authThemeBtn.addEventListener('click', () => {
+        const isLight = localStorage.getItem('fastline_theme') === 'light';
+        localStorage.setItem('fastline_theme', isLight ? 'dark' : 'light');
+        location.reload();
+      });
+
       // Enter key support
       document.getElementById('loginEmail').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });
       document.getElementById('loginPass').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });
-      document.getElementById('signupUsername').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupBtn').click(); });
-      document.getElementById('signupDescription').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupBtn').click(); });
-      document.getElementById('signupEmail').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupBtn').click(); });
+      document.getElementById('signupUsername').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupNext1').click(); });
+      document.getElementById('signupDescription').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupNext1').click(); });
+      document.getElementById('signupPass').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupNext1').click(); });
+      document.getElementById('signupEmail').addEventListener('keypress', e => { if (e.key === 'Enter' && !document.getElementById('sendOtpBtn').disabled) document.getElementById('sendOtpBtn').click(); });
       document.getElementById('signupOtp').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupBtn').click(); });
-      document.getElementById('signupPass').addEventListener('keypress', e => { if (e.key === 'Enter') document.getElementById('signupBtn').click(); });
 
       // Particles
       document.addEventListener("DOMContentLoaded", () => {
