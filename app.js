@@ -8,6 +8,8 @@ import { TypingIndicator, enableSwipeToReply, generateSmartReplies, renderSmartR
 import { setOnlineStatus, sendLocalNotification, requestNotificationPermission, ThemeManager } from './components/profile.js';
 import { WebRTCCall, showIncomingCallUI, CallTimer } from './components/video-call.js';
 import { openImageCropper } from './components/image-cropper.js';
+import { getSession, clearSession, emailToId, isProfileComplete } from './scripts/session.js';
+import { navigateTo } from './scripts/nav.js';
 import {
   collection, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, serverTimestamp, getDocs, limit
@@ -21,18 +23,7 @@ import {
 // ════════════════════════════════════════════════════
 
 const $ = id => document.getElementById(id);
-const emailToId = e => e.toLowerCase().replace(/[^a-z0-9]/g, '_');
 const normalizeUsername = (value) => value.trim().toLowerCase();
-const getSession = () => {
-  const e = localStorage.getItem('fastline_session_email');
-  const x = +localStorage.getItem('fastline_session_expiry');
-  return (e && Date.now() < x) ? e : null;
-};
-const isProfileComplete = (user) => {
-  const hasUsername = !!(user?.username || '').trim();
-  const hasAvatar = !!(user?.avatar || '').trim();
-  return hasUsername && hasAvatar;
-};
 
 function toast(msg, color = 'var(--accent)') {
   const t = document.createElement('div');
@@ -98,14 +89,14 @@ let currentTab = 'chats';      // Current nav tab
 
 async function init() {
   const email = getSession();
-  if (!email) { window.location.href = 'login.html'; return; }
+  if (!email) { navigateTo('login.html'); return; }
 
   const userId = emailToId(email);
   const userRef = doc(db, 'users', userId);
   const snap = await getDoc(userRef);
 
-  if (!snap.exists()) { window.location.href = 'profile.html'; return; }
-  if (!isProfileComplete(snap.data())) { window.location.href = 'profile.html'; return; }
+  if (!snap.exists()) { navigateTo('profile.html'); return; }
+  if (!isProfileComplete(snap.data())) { navigateTo('profile.html'); return; }
 
   currentUser = {
     email,
@@ -1770,9 +1761,8 @@ function setupUI() {
   }
 
   $('logoutBtn').addEventListener('click', () => {
-    localStorage.removeItem('fastline_session_email');
-    localStorage.removeItem('fastline_session_expiry');
-    window.location.href = 'login.html';
+    clearSession();
+    navigateTo('login.html');
   });
 
   // Groups and Status buttons

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#00BFFF" />
     <link rel="manifest" href="manifest.json" />
-    <title>JSL FastLine</title>
+    <title>FastLine Chats</title>
     <link rel="shortcut icon" href="icon-512.png" type="image/png" />
     <script src="scripts/theme-boot.js"></script>
     <style>
@@ -25,12 +25,8 @@
       }
       .splash { text-align: center; width: min(92vw, 460px); padding: 30px; }
       .logo {
-        width: 132px;
-        height: 132px;
-        margin: 0 auto 16px;
-        border-radius: 50%;
-        border: 3px solid rgba(0,191,255,0.55);
-        overflow: hidden;
+        width: 132px; height: 132px; margin: 0 auto 16px; border-radius: 50%;
+        border: 3px solid rgba(0,191,255,0.55); overflow: hidden;
         box-shadow: 0 0 24px rgba(0,191,255,0.35);
         animation: pulse 1.5s ease-in-out infinite alternate;
       }
@@ -46,22 +42,13 @@
         background: linear-gradient(90deg, #00bfff, #1e90ff);
         animation: slide 1s linear infinite;
       }
-      .status { margin-top: 10px; font-size: 0.95rem; color: var(--muted); }
+      .status { margin-top: 10px; font-size: 0.95rem; color: var(--muted); min-height: 1.2em; }
       .install-btn {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        z-index: 1000;
-        border: 1px solid rgba(0,191,255,0.5);
-        background: rgba(14,14,16,0.92);
-        color: #7df9ff;
-        border-radius: 999px;
-        padding: 8px 12px;
-        font-size: 0.82rem;
-        font-family: "Times New Roman", Times, serif;
-        cursor: pointer;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.35);
-        display: none;
+        position: fixed; right: 16px; bottom: 16px; z-index: 1000;
+        border: 1px solid rgba(0,191,255,0.5); background: rgba(14,14,16,0.92);
+        color: #7df9ff; border-radius: 999px; padding: 8px 12px; font-size: 0.82rem;
+        font-family: "Times New Roman", Times, serif; cursor: pointer;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.35); display: none;
       }
       .install-btn.show { display: inline-flex; align-items: center; gap: 6px; }
       @keyframes pulse { from { transform: scale(0.98); } to { transform: scale(1.02); } }
@@ -70,66 +57,61 @@
   </head>
   <body>
     <main class="splash">
-      <div class="logo"><img src="icon-512.png" alt="JSL FastLine" /></div>
-      <h1 class="brand">JSL FastLine</h1>
+      <div class="logo"><img src="icon-512.png" alt="FastLine" /></div>
+      <h1 class="brand">FastLine Chats</h1>
       <p class="hint">Loading secure setup...</p>
       <div class="loader"></div>
-      <p class="status">Please wait 5 seconds...</p>
+      <p class="status" id="splashStatus">Checking session…</p>
     </main>
     <button id="installAppBtn" class="install-btn" type="button">Install App</button>
+
     <script type="importmap">
       {
         "imports": {
           "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+          "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"
         }
       }
     </script>
+
     <script type="module">
       import { db } from "./scripts/firebase-config.js";
-      import { doc, getDoc } from "firebase/firestore";
+      import { getSession, clearSession } from "./scripts/session.js";
+      import { navigateTo, resolvePostAuthRoute } from "./scripts/nav.js";
 
-      const SESSION_EMAIL_KEY = "fastline_session_email";
-      const SESSION_EXPIRY_KEY = "fastline_session_expiry";
-      const emailToId = (email) => email.toLowerCase().replace(/[^a-z0-9]/g, "_");
+      const statusEl = document.getElementById("splashStatus");
+      const MIN_SPLASH_MS = 900;
 
-      const getSession = () => {
-        const email = localStorage.getItem(SESSION_EMAIL_KEY);
-        const expires = +localStorage.getItem(SESSION_EXPIRY_KEY);
-        return email && Date.now() < expires ? email : null;
-      };
+      async function boot() {
+        const started = Date.now();
+        let target = "login.html";
 
-      const clearSession = () => {
-        localStorage.removeItem(SESSION_EMAIL_KEY);
-        localStorage.removeItem(SESSION_EXPIRY_KEY);
-      };
-
-      const isProfileComplete = (user) => {
-        const hasUsername = !!(user?.username || "").trim();
-        const hasAvatar = !!(user?.avatar || "").trim();
-        return hasUsername && hasAvatar;
-      };
-
-      async function getTargetRoute() {
-        const email = getSession();
-        if (!email) return "login.html";
         try {
-          const snap = await getDoc(doc(db, "users", emailToId(email)));
-          if (!snap.exists()) {
-            clearSession();
-            return "login.html";
+          statusEl.textContent = "Connecting…";
+          const email = getSession();
+          if (email) {
+            statusEl.textContent = "Restoring your session…";
+            target = await resolvePostAuthRoute(db, email);
+            if (target === "login.html") clearSession(false);
+          } else {
+            statusEl.textContent = "Welcome — opening sign in…";
           }
-          return isProfileComplete(snap.data()) ? "fast.html" : "profile.html";
-        } catch {
-          return "login.html";
+        } catch (err) {
+          console.error("[Boot]", err);
+          statusEl.textContent = "Opening sign in…";
+          target = "login.html";
         }
+
+        const elapsed = Date.now() - started;
+        const wait = Math.max(0, MIN_SPLASH_MS - elapsed);
+        statusEl.textContent = "Redirecting…";
+        setTimeout(() => navigateTo(target), wait);
       }
 
-      const targetRoute = await getTargetRoute();
-      setTimeout(() => {
-        window.location.href = targetRoute;
-      }, 5000);
+      boot();
     </script>
+
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -175,13 +157,8 @@
           if (outcome === 'accepted') hideInstall();
           return;
         }
-
-        if (isIos) {
-          alert('On iPhone/iPad: tap Share then "Add to Home Screen".');
-          return;
-        }
-
-        alert('Use your browser menu → Install app / Add to Home Screen.');
+        if (isIos) alert('On iPhone/iPad: tap Share then "Add to Home Screen".');
+        else alert('Use your browser menu → Install app / Add to Home Screen.');
       });
     </script>
   </body>

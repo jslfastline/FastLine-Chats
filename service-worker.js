@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fastline-v6';
+const CACHE_NAME = 'fastline-v7';
 
 function asset(path) {
   return new URL(path, self.location).href;
@@ -18,6 +18,8 @@ const STATIC_ASSETS = [
   './icon-512.png',
   './scripts/firebase-config.js',
   './scripts/theme-boot.js',
+  './scripts/session.js',
+  './scripts/nav.js',
   './scripts/pwa-install.js',
   './components/chat.js',
   './components/profile.js',

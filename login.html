@@ -188,7 +188,8 @@
       {
         "imports": {
           "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+          "firebase/storage": "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js"
         }
       }
     </script>
@@ -196,9 +197,12 @@
     <script type="module">
       import { db } from "./scripts/firebase-config.js";
       import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+      import {
+        saveSession, getSession, clearSession, getRememberedEmail,
+        emailToId, isProfileComplete, normalizeEmail
+      } from "./scripts/session.js";
+      import { navigateTo, resolvePostAuthRoute } from "./scripts/nav.js";
 
-      const SESSION_EMAIL_KEY = "fastline_session_email";
-      const SESSION_EXPIRY_KEY = "fastline_session_expiry";
       const SESSION_DURATION = 30 * 24 * 60 * 60 * 1000;
       const OTP_KEY = "fastline_signup_otp";
       const SIGNUP_DRAFT_KEY = "fastline_signup_draft";
@@ -208,24 +212,9 @@
       const EMAILJS_TEMPLATE_ID = "template_nyxdbw7";
       const EMAILJS_PUBLIC_KEY = "bzQug4w22xmmQYFAy";
 
-      const saveSession = (email) => {
-        localStorage.setItem(SESSION_EMAIL_KEY, email);
-        localStorage.setItem(SESSION_EXPIRY_KEY, Date.now() + SESSION_DURATION);
-      };
-      const getSession = () => {
-        const e = localStorage.getItem(SESSION_EMAIL_KEY);
-        const x = +localStorage.getItem(SESSION_EXPIRY_KEY);
-        return e && Date.now() < x ? e : null;
-      };
-      const clearSession = () => {
-        [SESSION_EMAIL_KEY, SESSION_EXPIRY_KEY, "fastline_username", "fastline_avatar"].forEach(k => localStorage.removeItem(k));
-      };
-      const emailToId = (e) => e.toLowerCase().replace(/[^a-z0-9]/g, "_");
-      const isProfileComplete = (user) => {
-        const hasUsername = !!(user?.username || "").trim();
-        const hasAvatar = !!(user?.avatar || "").trim();
-        return hasUsername && hasAvatar;
-      };
+      const loginEmailEl = document.getElementById('loginEmail');
+      const remembered = getRememberedEmail();
+      if (remembered) loginEmailEl.value = remembered;
 
       function toast(msg, color = "var(--accent)") {
         const t = document.createElement("div");
@@ -328,7 +317,7 @@
 
       const saveOtp = (email, code) => {
         localStorage.setItem(OTP_KEY, JSON.stringify({
-          email: email.toLowerCase(),
+          email: normalizeEmail(email),
           code,
           expiresAt: Date.now() + OTP_EXPIRY_MS
         }));
@@ -374,30 +363,23 @@
           if (!raw) return false;
           const data = JSON.parse(raw);
           if (!data || Date.now() > data.expiresAt) return false;
-          return data.email === email.toLowerCase() && data.code === code;
+          return data.email === normalizeEmail(email) && data.code === code;
         } catch {
           return false;
         }
       };
 
       async function redirectAfterLogin(email) {
-        const userId = emailToId(email);
         try {
-          const snap = await getDoc(doc(db, "users", userId));
-          setTimeout(() => {
-            if (!snap.exists()) {
-              clearSession();
-              window.location.href = "login.html";
-              return;
-            }
-            window.location.href = isProfileComplete(snap.data()) ? "fast.html" : "profile.html";
-          }, 500);
-        } catch {
-          setTimeout(() => { window.location.href = "login.html"; }, 500);
+          const route = await resolvePostAuthRoute(db, email);
+          navigateTo(route);
+        } catch (err) {
+          console.error(err);
+          setMsg(document.getElementById('loginMsg'), 'Could not connect. Check internet and try again.', 'error');
         }
       }
 
-      // Check existing session
+      // Auto-restore session if still valid
       const savedEmail = getSession();
       if (savedEmail) {
         redirectAfterLogin(savedEmail);
@@ -419,30 +401,47 @@
 
       // LOGIN
       document.getElementById('loginBtn').addEventListener('click', async () => {
-        const email = document.getElementById('loginEmail').value.trim();
+        const email = normalizeEmail(document.getElementById('loginEmail').value);
         const pass = document.getElementById('loginPass').value;
         const msg = document.getElementById('loginMsg');
+        const btn = document.getElementById('loginBtn');
         setMsg(msg, '');
 
         if (!email || !pass) { setMsg(msg, 'Please fill in all fields.', 'error'); return; }
 
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in…';
+
         const userId = emailToId(email);
         try {
           const snap = await getDoc(doc(db, 'users', userId));
-          if (!snap.exists()) { setMsg(msg, 'Account not found. Please sign up.', 'error'); shake(document.getElementById('loginEmail')); return; }
+          if (!snap.exists()) {
+            setMsg(msg, 'No account found for this email. Please sign up first.', 'error');
+            shake(document.getElementById('loginEmail'));
+            switchTab('signup');
+            document.getElementById('signupEmail').value = email;
+            return;
+          }
           const userData = snap.data();
-          if (userData.password !== pass) { setMsg(msg, 'Incorrect password.', 'error'); shake(document.getElementById('loginPass')); return; }
-          setMsg(msg, 'Signing in…', 'success');
+          if (userData.password !== pass) {
+            setMsg(msg, 'Incorrect password. Try again or sign up if you are new.', 'error');
+            shake(document.getElementById('loginPass'));
+            return;
+          }
+          setMsg(msg, 'Welcome back! Redirecting…', 'success');
           saveSession(email);
-          toast('Welcome back!');
-          setTimeout(() => redirectAfterLogin(email), 500);
+          toast('Signed in successfully!');
+          await redirectAfterLogin(email);
         } catch (err) {
-          setMsg(msg, 'Error: ' + err.message, 'error');
+          setMsg(msg, 'Sign in failed: ' + (err.message || 'Network error'), 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
         }
       });
 
       async function requestOtp() {
-        const email = document.getElementById('signupEmail').value.trim();
+        const email = normalizeEmail(document.getElementById('signupEmail').value);
         const msg = document.getElementById('signupMsg');
         const sendOtpBtn = document.getElementById('sendOtpBtn');
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -496,7 +495,7 @@
       document.getElementById('signupBtn').addEventListener('click', async () => {
         const username = document.getElementById('signupUsername').value.trim();
         const description = document.getElementById('signupDescription').value.trim();
-        const email = document.getElementById('signupEmail').value.trim();
+        const email = normalizeEmail(document.getElementById('signupEmail').value);
         const otp = document.getElementById('signupOtp').value.trim();
         const pass = document.getElementById('signupPass').value;
         const msg = document.getElementById('signupMsg');
@@ -510,7 +509,12 @@
         const userId = emailToId(email);
         try {
           const existing = await getDoc(doc(db, 'users', userId));
-          if (existing.exists()) { setMsg(msg, 'Account already exists. Please sign in.', 'error'); return; }
+          if (existing.exists()) {
+            setMsg(msg, 'This email is already registered. Use Sign In instead.', 'error');
+            switchTab('login');
+            loginEmailEl.value = email;
+            return;
+          }
 
           await setDoc(doc(db, 'users', userId), {
             email,
@@ -531,7 +535,7 @@
           clearSignupDraft();
           saveSession(email);
           toast('Welcome to FastLine Chats!');
-          setTimeout(() => { window.location.href = 'profile.html'; }, 600);
+          setTimeout(() => navigateTo('profile.html'), 600);
         } catch (err) {
           setMsg(msg, 'Error: ' + err.message, 'error');
         }

@@ -107,18 +107,13 @@
   import { db, storage } from './scripts/firebase-config.js';
   import { doc, setDoc, getDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
   import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+  import { getSession, emailToId, normalizeEmail } from './scripts/session.js';
+  import { navigateTo } from './scripts/nav.js';
 
-  const getSession = () => {
-    const e = localStorage.getItem('fastline_session_email');
-    const x = +localStorage.getItem('fastline_session_expiry');
-    return (e && Date.now() < x) ? e : null;
-  };
-
-  const emailToId = e => e.toLowerCase().replace(/[^a-z0-9]/g, '_');
   const normalizeUsername = (value) => value.trim().toLowerCase();
 
   const email = getSession();
-  if (!email) { window.location.href = 'login.html'; }
+  if (!email) { navigateTo('login.html'); }
 
   let avatarUrl = null;
 
@@ -217,7 +212,7 @@
       localStorage.setItem('fastline_username', name);
       formMsg.textContent = '✓ Profile saved! Entering FastLine…';
       formMsg.className = 'msg success';
-      setTimeout(() => window.location.href = 'fast.html', 900);
+      setTimeout(() => navigateTo('fast.html'), 900);
     } catch (err) {
       formMsg.textContent = '❌ Error: ' + err.message;
       formMsg.className = 'msg error';
